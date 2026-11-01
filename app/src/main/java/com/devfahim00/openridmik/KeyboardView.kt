@@ -22,6 +22,9 @@ object Codes {
     const val LANG = -7
     const val SYM2 = -8
     const val SYM1 = -9
+    const val CUT = -10
+    const val COPY = -11
+    const val PASTE = -12
     const val SPACE = 32
 }
 
@@ -35,6 +38,8 @@ class Key(
     val special: Boolean = false,
     val spacer: Boolean = false,
     val repeat: Boolean = false,
+    /** Long-press action (Codes.CUT / COPY / PASTE), 0 for none. */
+    val action: Int = 0,
 )
 
 /** Canvas-drawn, GBoard-style keyboard with rounded keys, key previews, key repeat and long press. */
@@ -99,15 +104,16 @@ class KeyboardView(context: Context) : View(context) {
     }
 
     fun refreshTheme() {
-        cBg = context.getColor(R.color.kb_bg)
-        cKey = context.getColor(R.color.key_bg)
-        cSpecial = context.getColor(R.color.key_special_bg)
-        cPressed = context.getColor(R.color.key_pressed_bg)
-        cText = context.getColor(R.color.key_text)
-        cHint = context.getColor(R.color.key_hint)
-        cAccent = context.getColor(R.color.accent)
-        cAccentText = context.getColor(R.color.accent_text)
-        cPreview = context.getColor(R.color.preview_bg)
+        val t = Themes.current(context)
+        cBg = t.bg
+        cKey = t.key
+        cSpecial = t.special
+        cPressed = t.pressed
+        cText = t.text
+        cHint = t.hint
+        cAccent = t.accent
+        cAccentText = t.accentText
+        cPreview = t.preview
         invalidate()
     }
 
@@ -133,7 +139,8 @@ class KeyboardView(context: Context) : View(context) {
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val rh = dp(if (landscape) 40f else 48f)
+        val tall = rows.size >= 6
+        val rh = dp(if (landscape) (if (tall) 34f else 40f) else (if (tall) 42f else 48f))
         val h = (rh * maxOf(rows.size, 1) + dp(8f)).toInt()
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), h)
     }
@@ -282,10 +289,13 @@ class KeyboardView(context: Context) : View(context) {
             }
             Codes.SPACE -> drawText(canvas, spaceLabel, cx, cy, sp(13f), cHint)
             else -> {
-                val big = k.label.length <= 1
+                val big = k.label.length <= 2
                 drawText(canvas, k.label, cx, cy, sp(if (big) 22f else 15f), fg)
                 k.hint?.let {
-                    drawText(canvas, it, box.right - dp(9f), box.top + dp(12f), sp(10f), cHint)
+                    text.textSize = sp(10f)
+                    val w = text.measureText(it)
+                    val hx = if (w > dp(14f)) box.right - dp(3f) - w / 2f else box.right - dp(9f)
+                    drawText(canvas, it, hx, box.top + dp(12f), sp(10f), cHint)
                 }
             }
         }
