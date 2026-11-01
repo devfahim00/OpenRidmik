@@ -61,7 +61,7 @@ Avro phonetic · Probhat · Emoji · Clipboard manager · Number pad · Themes
 | **Hold a letter** | Type its alternate (for example a Bangla letter, or the English digit on the Bangla number row). The popup shows the alternate while you hold |
 | **Hold `X` / `C` / `V`** | Cut / copy / paste (with no selection, cut and copy act on the whole field) |
 | **Hold `,`** | Open the emoji panel |
-| **Toolbar** | Emoji · Clipboard · Number pad · Theme · Settings |
+| **Toolbar** | Emoji · Clipboard · Number pad · Avro key map · Theme · Settings |
 
 ### Phonetic cheat sheet (Avro)
 

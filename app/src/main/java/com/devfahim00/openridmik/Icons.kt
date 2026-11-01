@@ -26,6 +26,7 @@ object Ico {
     const val FLAG = 15
     const val DELETE = 16
     const val NUMPAD = 17
+    const val KEYMAP = 18
 
     fun forGroup(name: String): Int = when (name) {
         "Smileys & Emotion" -> SMILE
@@ -211,6 +212,12 @@ class IconView(ctx: Context, var kind: Int) : View(ctx) {
                     cubicTo(3f, 4f, -1f, -2f, -6f, 1f)
                 }
                 c.drawPath(p, stroke)
+            }
+            Ico.KEYMAP -> {
+                c.drawRoundRect(RectF(-11f, -8f, 11f, 8f), 3f, 3f, stroke)
+                for (i in -2..2) dot(c, i * 4.2f, -3.5f, 1.1f)
+                for (i in -1..1) dot(c, i * 4.2f + 0f, 0f, 1.1f)
+                c.drawLine(-5f, 4.2f, 5f, 4.2f, stroke)
             }
             Ico.NUMPAD -> {
                 c.drawRoundRect(RectF(-10f, -8f, 10f, 8f), 3f, 3f, stroke)

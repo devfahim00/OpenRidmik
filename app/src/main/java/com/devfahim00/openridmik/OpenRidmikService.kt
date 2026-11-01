@@ -113,6 +113,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         tool(Ico.CLIPBOARD) { showClipboard() }
         tool(Ico.SMILE) { showEmoji() }
         tool(Ico.NUMPAD) { showNumpad() }
+        tool(Ico.KEYMAP) { showKeyMap() }
         tool(Ico.PALETTE) { cycleTheme() }
         gearBtn = tool(Ico.GEAR) { openSettings() }
         refreshUpdateBadge()
@@ -840,6 +841,130 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
         refreshTab = { select(0) }
         select(if (recents.isNotEmpty() || groups.isEmpty()) 0 else 1)
+        return box
+    }
+
+    // ---- Avro key map ----
+
+    private fun showKeyMap() {
+        if (panel != null) return
+        currentInputConnection?.let { finishComposing(it) }
+        openPanel(buildKeyMapPanel())
+    }
+
+    private fun buildKeyMapPanel(): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(theme.bg)
+        }
+        val screenW = resources.displayMetrics.widthPixels
+        val cols = (screenW / dp(84)).coerceIn(3, 8)
+        val cellW = (screenW - dp(16)) / cols
+
+        box.addView(
+            TextView(this).apply {
+                text = "Avro key map"
+                textSize = 18f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(theme.text)
+                setPadding(dp(14), dp(10), dp(14), dp(2))
+            },
+        )
+        box.addView(
+            TextView(this).apply {
+                text = "Type the letters in blue to get the Bangla on top."
+                textSize = 12f
+                setTextColor(theme.hint)
+                setPadding(dp(14), 0, dp(14), dp(6))
+            },
+        )
+
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), 0, dp(8), dp(8))
+        }
+
+        fun section(title: String, items: List<Pair<String, String>>) {
+            if (items.isEmpty()) return
+            list.addView(
+                TextView(this).apply {
+                    text = title.uppercase()
+                    textSize = 11f
+                    letterSpacing = 0.08f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(theme.hint)
+                    setPadding(dp(6), dp(12), 0, dp(6))
+                },
+            )
+            val grid = GridLayout(this).apply { columnCount = cols }
+            for ((bn, latin) in items) {
+                val cell = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    background = rounded(theme.special, 10)
+                    addView(
+                        TextView(this@OpenRidmikService).apply {
+                            text = bn
+                            textSize = 22f
+                            gravity = Gravity.CENTER
+                            setTextColor(theme.text)
+                        },
+                    )
+                    addView(
+                        TextView(this@OpenRidmikService).apply {
+                            text = latin
+                            textSize = 13f
+                            gravity = Gravity.CENTER
+                            setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                            setTextColor(theme.accent)
+                        },
+                    )
+                }
+                grid.addView(cell, GridLayout.LayoutParams().apply {
+                    width = cellW - dp(6)
+                    height = dp(64)
+                    setMargins(dp(3), dp(3), dp(3), dp(3))
+                })
+            }
+            list.addView(grid)
+        }
+
+        val hasanta = AvroEngine.HASANTA
+        val vowels = ArrayList<Pair<String, String>>()
+        val consonants = ArrayList<Pair<String, String>>()
+        val conjuncts = ArrayList<Pair<String, String>>()
+        val signs = ArrayList<Pair<String, String>>()
+        for (e in avro.entries) {
+            when (e.kind) {
+                'V' -> vowels.add((if (e.kar.isEmpty()) e.value else "${e.value}  ${e.kar}") to e.key)
+                'C' ->
+                    if (e.value.contains(hasanta)) conjuncts.add(e.value to e.key)
+                    else consonants.add(e.value to e.key)
+                'J', 'W' -> signs.add("${e.value}  $hasanta${e.kar}" to e.key)
+                else -> signs.add((if (e.value.isEmpty()) "∅ break" else e.value) to e.key)
+            }
+        }
+
+        section("Vowels · independent  sign", vowels)
+        section("Consonants", consonants)
+        section("Conjuncts", conjuncts)
+        section("Signs & special", signs)
+        section(
+            "Symbols page",
+            listOf("৳" to "\$", "ঃ" to ":", "ঁ" to "^"),
+        )
+        list.addView(
+            TextView(this).apply {
+                text = "Capital letters give variants (T D N S R I U O Z). If a capital has no rule it works like the small letter. " +
+                    "Hold a letter key to type its Bangla letter directly. On the symbols page \$ gives ৳, and : ^ give ঃ ঁ after a Bangla letter (hold for the plain character)."
+                textSize = 12f
+                setTextColor(theme.hint)
+                setPadding(dp(6), dp(12), dp(6), dp(6))
+            },
+        )
+
+        box.addView(ScrollView(this).apply { addView(list) }, lp(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        box.addView(panelBottomBar(), lp(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         return box
     }
 

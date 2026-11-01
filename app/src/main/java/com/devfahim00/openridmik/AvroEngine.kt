@@ -13,6 +13,11 @@ class AvroEngine(rulesText: String) {
     private val rules = HashMap<String, Rule>()
     private var maxLen = 1
 
+    /** One row of the rules file, kept in file order (used by the key-map screen). */
+    class Entry(val key: String, val kind: Char, val value: String, val kar: String)
+
+    val entries = ArrayList<Entry>()
+
     init {
         for (line in rulesText.lines()) {
             val l = line.trim()
@@ -29,6 +34,7 @@ class AvroEngine(rulesText: String) {
             val value = if (p[2] == "-") "" else p[2]
             val kar = if (p.size > 3 && p[3] != "-") p[3] else ""
             rules[p[1]] = Rule(type, value, kar)
+            entries.add(Entry(p[1], p[0][0], value, kar))
             if (p[1].length > maxLen) maxLen = p[1].length
         }
     }
