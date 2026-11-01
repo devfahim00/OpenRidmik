@@ -36,7 +36,6 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private lateinit var toolbar: LinearLayout
     private lateinit var suggestionBar: LinearLayout
     private lateinit var kbView: KeyboardView
-    private lateinit var layoutBtn: TextView
     private lateinit var theme: KbTheme
     private val suggestionViews = ArrayList<TextView>()
     private val toolbarButtons = ArrayList<View>()
@@ -114,15 +113,6 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         tool(Ico.CLIPBOARD) { showClipboard() }
         tool(Ico.NUMPAD) { showNumpad() }
         tool(Ico.PALETTE) { cycleTheme() }
-        layoutBtn = TextView(this).apply {
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setTextColor(theme.text)
-            setTypeface(typeface, Typeface.BOLD)
-            setOnClickListener { toggleLayout() }
-        }
-        toolbarButtons.add(layoutBtn)
-        toolbar.addView(layoutBtn, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         gearBtn = tool(Ico.GEAR) { openSettings() }
         refreshUpdateBadge()
 
@@ -267,11 +257,6 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             probhat -> "বাংলা · প্রভাত"
             else -> "বাংলা · ফোনেটিক"
         }
-        layoutBtn.text = when {
-            !bangla -> "EN"
-            probhat -> "প্রভাত"
-            else -> "Avro"
-        }
         kbView.rows = rows
         updateBarVisibility()
     }
@@ -292,20 +277,6 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         mode = Mode.NUM
         shift = 0
         rebuild()
-    }
-
-    private fun toggleLayout() {
-        currentInputConnection?.let { finishComposing(it) }
-        if (!bangla && !forceLatin) {
-            bangla = true
-            Prefs.setBangla(this, true)
-        } else {
-            probhat = !probhat
-            Prefs.setLayout(this, if (probhat) "probhat" else "avro")
-        }
-        shift = 0
-        rebuild()
-        Toast.makeText(this, if (probhat) "Probhat" else "Avro (phonetic)", Toast.LENGTH_SHORT).show()
     }
 
     // ---- key handling ----
@@ -512,13 +483,31 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         }
     }
 
+    /** Globe key: English -> Avro -> Probhat -> English. */
     private fun toggleLang() {
         currentInputConnection?.let { finishComposing(it) }
-        bangla = !bangla
+        when {
+            !bangla -> {
+                bangla = true
+                probhat = false
+            }
+            !probhat -> probhat = true
+            else -> bangla = false
+        }
+        if (bangla) Prefs.setLayout(this, if (probhat) "probhat" else "avro")
         if (!forceLatin) Prefs.setBangla(this, bangla)
         shift = 0
         rebuild()
         updateAutoCap()
+        Toast.makeText(
+            this,
+            when {
+                !bangla -> "English"
+                probhat -> "Probhat"
+                else -> "Avro (phonetic)"
+            },
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     private fun performEnter(ic: InputConnection) {

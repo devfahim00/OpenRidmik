@@ -314,7 +314,9 @@ class KeyboardView(context: Context) : View(context) {
 
     private fun drawPreview(canvas: Canvas, p: Press) {
         val k = p.key
-        if (k.code <= Codes.SPACE || k.label.isEmpty() || k.label.length > 2) return
+        // while a long-press alternate is being typed, show that alternate in the popup
+        val shown = if (p.longDone && k.alt != null && k.action == 0) k.alt else k.label
+        if (k.code <= Codes.SPACE || shown.isEmpty() || shown.length > 3) return
         val rc = p.rect
         val w = rc.width() * 1.3f
         val h = rc.height() * 1.4f
@@ -327,7 +329,7 @@ class KeyboardView(context: Context) : View(context) {
         stroke.color = cHint
         stroke.strokeWidth = dp(1f)
         canvas.drawRoundRect(box, dp(12f), dp(12f), stroke)
-        drawText(canvas, k.label, box.centerX(), box.centerY(), sp(30f), cText)
+        drawText(canvas, shown, box.centerX(), box.centerY(), sp(30f), cText)
     }
 
     // ---- touch ----

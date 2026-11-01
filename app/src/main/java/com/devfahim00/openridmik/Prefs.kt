@@ -20,7 +20,7 @@ object Prefs {
         sp(c).edit().putBoolean(key, value).apply()
     }
 
-    fun isBangla(c: Context): Boolean = sp(c).getString("lang", "bn") == "bn"
+    fun isBangla(c: Context): Boolean = sp(c).getString("lang", "en") == "bn"
 
     fun setBangla(c: Context, bangla: Boolean) {
         sp(c).edit().putString("lang", if (bangla) "bn" else "en").apply()
