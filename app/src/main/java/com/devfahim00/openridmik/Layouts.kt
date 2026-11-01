@@ -43,23 +43,23 @@ object Layouts {
 
     // ---- Probhat (fixed Bangla layout) ----
 
-    private class PK(val latin: Char, val n: String, val s: String)
+    /** [sa] = extra long-press character available on the shifted key (e.g. ঐ -> ঞ). */
+    private class PK(val latin: Char, val n: String, val s: String, val sa: String? = null)
 
     private val probhatRow1 = listOf(
         PK('q', "দ", "ধ"), PK('w', "ূ", "ঊ"), PK('e', "ী", "ঈ"), PK('r', "র", "\u09DC"), PK('t', "ট", "ঠ"),
-        PK('y', "এ", "ঐ"), PK('u', "ু", "উ"), PK('i', "ি", "ই"), PK('o', "ও", "ঔ"), PK('p', "প", "ফ"),
+        PK('y', "এ", "ঐ", "ঞ"), PK('u', "ু", "উ", "ৎ"), PK('i', "ি", "ই"), PK('o', "ও", "ঔ"), PK('p', "প", "ফ"),
+        PK('[', "ে", "ৈ"), PK(']', "ো", "ৌ"),
     )
     private val probhatRow2 = listOf(
         PK('a', "া", "অ"), PK('s', "স", "ষ"), PK('d', "ড", "ঢ"), PK('f', "ত", "থ"), PK('g', "গ", "ঘ"),
         PK('h', "হ", "ঃ"), PK('j', "জ", "ঝ"), PK('k', "ক", "খ"), PK('l', "ল", "ং"),
     )
     private val probhatRow3 = listOf(
-        PK('z', "\u09DF", "য"), PK('x', "শ", "\u09DD"), PK('c', "চ", "ছ"), PK('v', "আ", "ঋ"),
+        PK('z', "\u09DF", "য", "\u09CD\u09AF"), PK('x', "শ", "\u09DD"), PK('c', "চ", "ছ"), PK('v', "আ", "ঋ"),
         PK('b', "ব", "ভ"), PK('n', "ন", "ণ"), PK('m', "ম", "ঙ"),
+        PK(',', "ৃ", "ৃ"), PK('/', "্", "ঁ"),
     )
-
-    /** Signs and letters Probhat puts on punctuation / digit keys (shown on a dedicated extra row). */
-    private val probhatExtra = listOf("ে", "ো", "ৈ", "ৌ", "ৃ", "ঁ", "্", "ৎ", "ঞ")
 
     private const val SIGNS = "\u09BE\u09BF\u09C0\u09C1\u09C2\u09C3\u09C7\u09C8\u09CB\u09CC\u0981\u09CD"
 
@@ -72,18 +72,14 @@ object Layouts {
         return if (act != 0) {
             Key(disp(v), v.codePointAt(0), v, hint = clipLabel(act), action = act)
         } else {
-            val other = if (shift) null else p.s
+            val other = if (shift) p.sa else if (p.s != p.n) p.s else null
             Key(disp(v), v.codePointAt(0), v, hint = other?.let { disp(it) }, alt = other)
         }
     }
 
-    private fun probhatExtraRow(): List<Key> = probhatExtra.map { s ->
-        Key(disp(s), s.codePointAt(0), s, alt = if (s == "্") "\u200C" else null)
-    }
-
     private fun digitRow(bangla: Boolean): List<Key> = "1234567890".map { d ->
         val t = if (bangla) AvroEngine.banglaDigit(d) else d.toString()
-        Key(t, d.code, t)
+        Key(t, d.code, t, hint = if (bangla) d.toString() else null, alt = if (bangla) d.toString() else null)
     }
 
     private fun bottom(alpha: Boolean, bangla: Boolean): List<Key> {
@@ -121,13 +117,12 @@ object Layouts {
         if (numberRow) rows.add(digitRow(bangla && banglaDigits))
         if (bangla && probhat) {
             rows.add(probhatRow1.map { probhatKey(it, shift) })
-            rows.add(listOf(spacer(0.5f)) + probhatRow2.map { probhatKey(it, shift) } + listOf(spacer(0.5f)))
+            rows.add(listOf(spacer(1.5f)) + probhatRow2.map { probhatKey(it, shift) } + listOf(spacer(1.5f)))
             rows.add(
-                listOf(special("", Codes.SHIFT, 1.5f)) +
+                listOf(special("", Codes.SHIFT, 1.4f)) +
                     probhatRow3.map { probhatKey(it, shift) } +
-                    listOf(special("", Codes.DELETE, 1.5f, repeat = true)),
+                    listOf(special("", Codes.DELETE, 1.6f, repeat = true)),
             )
-            rows.add(probhatExtraRow())
         } else {
             rows.add(letters("qwertyuiop", shift, bangla))
             rows.add(listOf(spacer(0.5f)) + letters("asdfghjkl", shift, bangla) + listOf(spacer(0.5f)))

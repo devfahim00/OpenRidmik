@@ -39,7 +39,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private lateinit var layoutBtn: TextView
     private lateinit var theme: KbTheme
     private val suggestionViews = ArrayList<TextView>()
-    private val toolbarButtons = ArrayList<TextView>()
+    private val toolbarButtons = ArrayList<View>()
     private var panel: View? = null
     private var clipList: LinearLayout? = null
 
@@ -100,24 +100,26 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             gravity = Gravity.CENTER_VERTICAL
         }
         toolbarButtons.clear()
-        fun tool(label: String, onClick: () -> Unit): TextView {
-            val tv = TextView(this).apply {
-                text = label
-                textSize = 17f
-                gravity = Gravity.CENTER
-                setTextColor(theme.text)
+        fun tool(kind: Int, onClick: () -> Unit) {
+            val v = IconView(this, kind).apply {
+                color = theme.text
                 setOnClickListener { onClick() }
             }
-            toolbarButtons.add(tv)
-            toolbar.addView(tv, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-            return tv
+            toolbarButtons.add(v)
+            toolbar.addView(v, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
-        tool("📋") { showClipboard() }
-        tool("🎨") { cycleTheme() }
-        layoutBtn = tool("") { toggleLayout() }
-        layoutBtn.textSize = 14f
-        layoutBtn.setTypeface(layoutBtn.typeface, Typeface.BOLD)
-        tool("⚙") { openSettings() }
+        tool(Ico.CLIPBOARD) { showClipboard() }
+        tool(Ico.PALETTE) { cycleTheme() }
+        layoutBtn = TextView(this).apply {
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(theme.text)
+            setTypeface(typeface, Typeface.BOLD)
+            setOnClickListener { toggleLayout() }
+        }
+        toolbarButtons.add(layoutBtn)
+        toolbar.addView(layoutBtn, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        tool(Ico.GEAR) { openSettings() }
 
         suggestionBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -137,8 +139,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             suggestionBar.addView(tv, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
         kbView = KeyboardView(this).also { it.listener = this }
-        root.addView(toolbar, lp(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
-        root.addView(suggestionBar, lp(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
+        root.addView(toolbar, lp(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
+        root.addView(suggestionBar, lp(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
         root.addView(kbView, lp(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         rebuild()
         return root
@@ -208,8 +210,15 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         theme = Themes.current(this)
         root.setBackgroundColor(theme.bg)
         for (tv in suggestionViews) tv.setTextColor(theme.text)
-        for (b in toolbarButtons) b.setTextColor(theme.text)
+        for (b in toolbarButtons) tint(b)
         kbView.refreshTheme()
+    }
+
+    private fun tint(v: View) {
+        when (v) {
+            is IconView -> v.color = theme.text
+            is TextView -> v.setTextColor(theme.text)
+        }
     }
 
     private fun cycleTheme() {
@@ -254,11 +263,13 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         updateBarVisibility()
     }
 
+    /** The strip above the keys shows the toolbar normally and word suggestions while composing (Avro). */
     private fun updateBarVisibility() {
+        if (!::toolbar.isInitialized) return
         val noPanel = panel == null
-        toolbar.visibility = if (noPanel) View.VISIBLE else View.GONE
-        val show = mode == Mode.ALPHA && bangla && !probhat && Prefs.get(this, "suggestions") && noPanel
-        suggestionBar.visibility = if (show) View.VISIBLE else View.GONE
+        val composing = raw.isNotEmpty() && mode == Mode.ALPHA && bangla && !probhat && Prefs.get(this, "suggestions")
+        suggestionBar.visibility = if (noPanel && composing) View.VISIBLE else View.GONE
+        toolbar.visibility = if (noPanel && !composing) View.VISIBLE else View.GONE
     }
 
     private fun toggleLayout() {
@@ -518,6 +529,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             suggestionViews[i].text = t
             suggestionViews[i].visibility = if (t.isEmpty()) View.INVISIBLE else View.VISIBLE
         }
+        updateBarVisibility()
     }
 
     private fun clearBar() = setBar(null, null, null)
@@ -575,7 +587,11 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             setPadding(dp(6), dp(3), dp(6), dp(3))
         }
         val abc = panelButton("ABC") { hidePanel() }
-        val del = panelButton("⌫") {}
+        val del = IconView(this, Ico.DELETE).apply {
+            color = theme.text
+            background = rounded(theme.special, 10)
+            scale = 0.5f
+        }
         attachRepeat(del) { sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL) }
         bar.addView(abc, lp(0, dp(40), 1.2f).apply { rightMargin = dp(4) })
         bar.addView(View(this), lp(0, dp(40), 3f))
@@ -696,10 +712,11 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(4), dp(3), dp(4), dp(3))
         }
-        val tabViews = ArrayList<TextView>()
+        val tabViews = ArrayList<IconView>()
         fun select(i: Int) {
             for ((j, t) in tabViews.withIndex()) {
                 t.background = if (j == i) rounded(theme.accent, 10) else null
+                t.color = if (j == i) theme.accentText else theme.text
             }
             if (i == 0) {
                 fill(recents.map { EmojiData.Emoji(it, false) }, "Emoji you use will show up here.")
@@ -707,12 +724,11 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                 fill(groups[i - 1].items, "")
             }
         }
-        val icons = listOf("🕘") + groups.map { it.icon }
-        for ((i, icon) in icons.withIndex()) {
-            val t = TextView(this).apply {
-                text = icon
-                textSize = 20f
-                gravity = Gravity.CENTER
+        val kinds = listOf(Ico.CLOCK) + groups.map { Ico.forGroup(it.name) }
+        for ((i, kind) in kinds.withIndex()) {
+            val t = IconView(this, kind).apply {
+                color = theme.text
+                scale = 0.6f
                 setOnClickListener { select(i) }
             }
             tabViews.add(t)
@@ -788,7 +804,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             list.addView(
                 TextView(this).apply {
                     text = if (Prefs.get(this@OpenRidmikService, "clipboard")) {
-                        "Nothing copied yet. Copy some text and it will show up here.\nTip: tap 📌 to keep an item pinned."
+                        "Nothing copied yet. Copy some text and it will show up here.\nTip: tap the pin to keep an item."
                     } else {
                         "Clipboard history is turned off. You can turn it on in OpenRidmik settings."
                     }
@@ -825,11 +841,11 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
         )
         row.addView(
-            TextView(this).apply {
-                text = "📌"
-                textSize = 16f
-                gravity = Gravity.CENTER
-                alpha = if (item.pinned) 1f else 0.3f
+            IconView(this, Ico.PIN).apply {
+                color = theme.text
+                filled = item.pinned
+                alpha = if (item.pinned) 1f else 0.4f
+                scale = 0.5f
                 setOnClickListener {
                     ClipHistory.togglePin(this@OpenRidmikService, item.text)
                     refreshClipList()
@@ -838,11 +854,9 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             lp(dp(40), dp(40)),
         )
         row.addView(
-            TextView(this).apply {
-                text = "✕"
-                textSize = 15f
-                gravity = Gravity.CENTER
-                setTextColor(theme.hint)
+            IconView(this, Ico.CLOSE).apply {
+                color = theme.hint
+                scale = 0.45f
                 setOnClickListener {
                     ClipHistory.remove(this@OpenRidmikService, item.text)
                     refreshClipList()

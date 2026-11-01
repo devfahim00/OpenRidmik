@@ -232,7 +232,7 @@ class SettingsActivity : Activity() {
 
         label(
             "Tips: select text, then press and hold X to cut, C to copy, V to paste. " +
-                "The 📋 button opens the clipboard history (tap 📌 to pin), 🎨 switches theme, " +
+                "The clipboard button opens the clipboard history (tap the pin to keep an item), the palette switches theme, " +
                 "and the layout button switches Avro / Probhat. The smiley key next to the globe opens emoji " +
                 "by category (hold a hand or person emoji for skin tones). " +
                 "Tap the globe to switch Bangla/English (hold for the keyboard picker). " +
