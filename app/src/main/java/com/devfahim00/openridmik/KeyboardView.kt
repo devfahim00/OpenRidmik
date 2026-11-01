@@ -290,12 +290,16 @@ class KeyboardView(context: Context) : View(context) {
             Codes.SPACE -> drawText(canvas, spaceLabel, cx, cy, sp(13f), cHint)
             else -> {
                 val big = k.label.length <= 2
-                drawText(canvas, k.label, cx, cy, sp(if (big) 22f else 15f), fg)
+                // keys with a corner hint: shrink the main label a little and drop it so the two never touch
+                val hinted = k.hint != null
+                val size = if (big) (if (hinted) 20f else 22f) else 15f
+                val dy = if (hinted) dp(4f) else 0f
+                drawText(canvas, k.label, cx, cy + dy, sp(size), fg)
                 k.hint?.let {
-                    text.textSize = sp(10f)
+                    text.textSize = sp(9f)
                     val w = text.measureText(it)
-                    val hx = if (w > dp(14f)) box.right - dp(3f) - w / 2f else box.right - dp(9f)
-                    drawText(canvas, it, hx, box.top + dp(12f), sp(10f), cHint)
+                    val hx = if (w > dp(14f)) box.right - dp(3f) - w / 2f else box.right - dp(8f)
+                    drawText(canvas, it, hx, box.top + dp(10f), sp(9f), cHint)
                 }
             }
         }

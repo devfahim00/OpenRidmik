@@ -362,14 +362,28 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         when (action) {
             Codes.PASTE -> pasteClip(ic)
             else -> {
-                val sel = ic.getSelectedText(0)?.toString()
-                if (sel.isNullOrEmpty()) {
-                    toast("Select some text first")
+                // With a selection act on it; otherwise act on the whole field (auto select-all).
+                var text = ic.getSelectedText(0)?.toString()
+                var before = ""
+                var after = ""
+                var whole = false
+                if (text.isNullOrEmpty()) {
+                    before = ic.getTextBeforeCursor(100000, 0)?.toString() ?: ""
+                    after = ic.getTextAfterCursor(100000, 0)?.toString() ?: ""
+                    text = before + after
+                    whole = true
+                }
+                if (text.isEmpty()) {
+                    toast("Nothing to ${if (action == Codes.CUT) "cut" else "copy"}")
                     return
                 }
-                clipboard?.setPrimaryClip(ClipData.newPlainText("text", sel))
-                ClipHistory.add(this, sel)
-                if (action == Codes.CUT) ic.commitText("", 1)
+                clipboard?.setPrimaryClip(ClipData.newPlainText("text", text))
+                ClipHistory.add(this, text)
+                if (action == Codes.CUT) {
+                    if (whole) ic.deleteSurroundingText(before.length, after.length) else ic.commitText("", 1)
+                } else if (whole) {
+                    ic.performContextMenuAction(android.R.id.selectAll)
+                }
                 toast(if (action == Codes.CUT) "Cut" else "Copied")
             }
         }
