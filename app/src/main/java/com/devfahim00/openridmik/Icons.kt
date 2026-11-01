@@ -214,10 +214,23 @@ class IconView(ctx: Context, var kind: Int) : View(ctx) {
                 c.drawPath(p, stroke)
             }
             Ico.KEYMAP -> {
-                c.drawRoundRect(RectF(-11f, -8f, 11f, 8f), 3f, 3f, stroke)
-                for (i in -2..2) dot(c, i * 4.2f, -3.5f, 1.1f)
-                for (i in -1..1) dot(c, i * 4.2f + 0f, 0f, 1.1f)
-                c.drawLine(-5f, 4.2f, 5f, 4.2f, stroke)
+                // open book (key map reference)
+                val book = Path().apply {
+                    moveTo(0f, -6f)
+                    quadTo(-5.5f, -9f, -11f, -7f)
+                    lineTo(-11f, 7f)
+                    quadTo(-5.5f, 5f, 0f, 8f)
+                    quadTo(5.5f, 5f, 11f, 7f)
+                    lineTo(11f, -7f)
+                    quadTo(5.5f, -9f, 0f, -6f)
+                    close()
+                }
+                c.drawPath(book, stroke)
+                c.drawLine(0f, -6f, 0f, 8f, stroke)
+                c.drawLine(-8f, -2.5f, -3.5f, -3.5f, stroke)
+                c.drawLine(-8f, 1f, -3.5f, 0f, stroke)
+                c.drawLine(3.5f, -3.5f, 8f, -2.5f, stroke)
+                c.drawLine(3.5f, 0f, 8f, 1f, stroke)
             }
             Ico.NUMPAD -> {
                 c.drawRoundRect(RectF(-10f, -8f, 10f, 8f), 3f, 3f, stroke)
