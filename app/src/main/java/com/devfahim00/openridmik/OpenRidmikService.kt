@@ -52,6 +52,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private var lastShiftTap = 0L
     private var enterLabel: String? = null
     private val raw = StringBuilder()
+    private var barHasItems = false
     private var audio: AudioManager? = null
     private var clipboard: ClipboardManager? = null
     private val ui = Handler(Looper.getMainLooper())
@@ -189,6 +190,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         currentInputConnection?.let { finishComposing(it) }
+        UserDict.save(this)
         super.onFinishInputView(finishingInput)
     }
 
@@ -267,9 +269,9 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private fun updateBarVisibility() {
         if (!::toolbar.isInitialized) return
         val noPanel = panel == null
-        val composing = raw.isNotEmpty() && mode == Mode.ALPHA && bangla && !probhat && Prefs.get(this, "suggestions")
-        suggestionBar.visibility = if (noPanel && composing) View.VISIBLE else View.GONE
-        toolbar.visibility = if (noPanel && !composing) View.VISIBLE else View.GONE
+        val show = barHasItems && mode == Mode.ALPHA && !passwordField && Prefs.get(this, "suggestions")
+        suggestionBar.visibility = if (noPanel && show) View.VISIBLE else View.GONE
+        toolbar.visibility = if (noPanel && !show) View.VISIBLE else View.GONE
     }
 
     private fun toggleLayout() {
@@ -302,12 +304,15 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             Codes.ENTER -> {
                 finishComposing(ic)
                 performEnter(ic)
+                clearBar()
                 updateAutoCap()
             }
             Codes.SPACE -> {
                 finishComposing(ic)
                 ic.commitText(" ", 1)
+                learnLastWord(ic)
                 afterChar()
+                updateNextWords(ic)
             }
             Codes.SYMBOLS, Codes.SYM1 -> {
                 finishComposing(ic)
@@ -439,6 +444,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         } else {
             finishComposing(ic)
             ic.commitText(t, 1)
+            clearBar()
         }
         afterChar()
     }
@@ -458,6 +464,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         } else {
             val sel = ic.getSelectedText(0)
             if (!sel.isNullOrEmpty()) ic.commitText("", 1) else sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+            clearBar()
         }
         updateAutoCap()
     }
@@ -517,7 +524,10 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         }
         val bn = avro.convert(raw.toString())
         ic.setComposingText(bn, 1)
-        val sug = if (Prefs.get(this, "suggestions")) dict.suggest(bn, 2) else emptyList()
+        val sug = if (Prefs.get(this, "suggestions") && !passwordField) {
+            val learned = UserDict.suggest(this, bn, prevWord(ic, composing = true), 2)
+            (learned + dict.suggest(bn, 4)).distinct().take(2)
+        } else emptyList()
         setBar(sug.getOrNull(0), bn, sug.getOrNull(1))
     }
 
@@ -530,10 +540,12 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     private fun pickSuggestion(word: String) {
         val ic = currentInputConnection ?: return
-        if (word.isEmpty() || raw.isEmpty()) return
+        if (word.isEmpty()) return
         ic.commitText("$word ", 1)
         raw.clear()
         clearBar()
+        learnLastWord(ic)
+        updateNextWords(ic)
     }
 
     private fun setBar(a: String?, b: String?, c: String?) {
@@ -543,7 +555,41 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             suggestionViews[i].text = t
             suggestionViews[i].visibility = if (t.isEmpty()) View.INVISIBLE else View.VISIBLE
         }
+        barHasItems = items.any { !it.isNullOrEmpty() }
         updateBarVisibility()
+    }
+
+    // ---- learning + next-word prediction ----
+
+    private val wordRe = Regex("[\\p{L}\\p{M}]+")
+
+    /** Word preceding the one being typed (composing) or the last finished word (after a space). */
+    private fun prevWord(ic: InputConnection, composing: Boolean): String? {
+        val t = ic.getTextBeforeCursor(80, 0)?.toString() ?: return null
+        val ws = wordRe.findAll(t).map { it.value }.toList()
+        if (!composing) return if (t.endsWith(" ")) ws.lastOrNull() else null
+        // composing text sits before the cursor too, so skip it
+        return if (ws.size >= 2) ws[ws.size - 2] else null
+    }
+
+    /** Called right after "word " has been committed: learns the word and its pair with the previous one. */
+    private fun learnLastWord(ic: InputConnection) {
+        if (passwordField) return
+        val t = ic.getTextBeforeCursor(80, 0)?.toString() ?: return
+        if (!t.endsWith(" ")) return
+        val ws = wordRe.findAll(t).map { it.value }.toList()
+        val w = ws.lastOrNull() ?: return
+        UserDict.learn(this, ws.getOrNull(ws.size - 2), w)
+    }
+
+    private fun updateNextWords(ic: InputConnection) {
+        if (!Prefs.get(this, "suggestions") || passwordField || mode != Mode.ALPHA || raw.isNotEmpty()) {
+            clearBar()
+            return
+        }
+        val prev = prevWord(ic, composing = false)
+        val n = if (prev == null) emptyList() else UserDict.next(this, prev, 3)
+        setBar(n.getOrNull(0), n.getOrNull(1), n.getOrNull(2))
     }
 
     private fun clearBar() = setBar(null, null, null)
@@ -632,7 +678,14 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         val cellW = screenW / cols
 
         val groups = EmojiData.groups(this)
-        val recents = EmojiData.recents(this).filter { EmojiData.supported(it) }
+        var recents = EmojiData.recents(this).filter { EmojiData.supported(it) }
+        var currentTab = -1
+        var refreshTab: () -> Unit = {}
+        fun commit(e: String) {
+            commitEmoji(e)
+            recents = EmojiData.recents(this).filter { EmojiData.supported(it) }
+            if (currentTab == 0) refreshTab()
+        }
 
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -661,7 +714,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                         textSize = 26f
                         gravity = Gravity.CENTER
                         setOnClickListener {
-                            commitEmoji(v)
+                            commit(v)
                             toneBar.visibility = View.GONE
                         }
                     },
@@ -707,7 +760,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                     gravity = Gravity.CENTER
                     setOnClickListener {
                         toneBar.visibility = View.GONE
-                        commitEmoji(e.text)
+                        commit(e.text)
                     }
                     if (e.skin) setOnLongClickListener {
                         showTones(e.text)
@@ -728,6 +781,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         }
         val tabViews = ArrayList<IconView>()
         fun select(i: Int) {
+            currentTab = i
             for ((j, t) in tabViews.withIndex()) {
                 t.background = if (j == i) rounded(theme.accent, 10) else null
                 t.color = if (j == i) theme.accentText else theme.text
@@ -758,6 +812,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         box.addView(scroll, lp(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         box.addView(panelBottomBar(), lp(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
+        refreshTab = { select(0) }
         select(if (recents.isNotEmpty() || groups.isEmpty()) 0 else 1)
         return box
     }
