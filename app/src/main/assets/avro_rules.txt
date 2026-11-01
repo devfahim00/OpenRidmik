@@ -1,0 +1,79 @@
+# OpenRidmik phonetic rules (Avro-style scheme). Columns: type latin value [kar]
+# V = vowel (value = independent form, kar = vowel sign), C = consonant (joins with hasanta),
+# W/J = joiner: value standalone (W: vowel, J: consonant), kar = form used after a consonant (joined with hasanta).
+# S = standalone symbol. "-" means empty.
+V o অ -
+V a আ া
+V i ই ি
+V I ঈ ী
+V ii ঈ ী
+V ee ঈ ী
+V u উ ু
+V U ঊ ূ
+V uu ঊ ূ
+V oo ঊ ূ
+V rri ঋ ৃ
+V e এ ে
+V oi ঐ ৈ
+V O ও ো
+V OI ঔ ৌ
+V OU ঔ ৌ
+V ou ঔ ৌ
+C k ক
+C kh খ
+C g গ
+C gh ঘ
+C Ng ঙ
+C c চ
+C ch ছ
+C j জ
+C jh ঝ
+C NG ঞ
+C T ট
+C Th ঠ
+C D ড
+C Dh ঢ
+C N ণ
+C t ত
+C th থ
+C d দ
+C dh ধ
+C n ন
+C p প
+C ph ফ
+C f ফ
+C b ব
+C bh ভ
+C v ভ
+C m ম
+C z য
+C r র
+C l ল
+C sh শ
+C S শ
+C Sh ষ
+C s স
+C h হ
+C R ড়
+C Rh ঢ়
+J y য় য
+J Y য় য
+C x ক্স
+C kkh ক্ষ
+C GG জ্ঞ
+C ngk ঙ্ক
+C ngkh ঙ্খ
+C ngg ঙ্গ
+C nggh ঙ্ঘ
+C ngm ঙ্ম
+C nj ঞ্জ
+C nc ঞ্চ
+W w ও ব
+S ng ং
+S : ঃ
+S ^ ঁ
+S . ।
+S .. .
+S $ ৳
+S ` -
+S t`` ৎ

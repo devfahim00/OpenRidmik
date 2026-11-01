@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenRidmik</string>
+    <string name="subtype_bn">বাংলা (ফোনেটিক)</string>
+    <string name="subtype_en">English</string>
+</resources>

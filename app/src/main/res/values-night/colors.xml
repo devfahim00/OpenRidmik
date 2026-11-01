@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kb_bg">#202124</color>
+    <color name="key_bg">#3C4043</color>
+    <color name="key_special_bg">#2E3134</color>
+    <color name="key_pressed_bg">#5A5F64</color>
+    <color name="key_text">#E8EAED</color>
+    <color name="key_hint">#9AA0A6</color>
+    <color name="accent">#8AB4F8</color>
+    <color name="accent_text">#202124</color>
+    <color name="preview_bg">#4A4F54</color>
+</resources>
