@@ -8,17 +8,17 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.Button
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
@@ -63,6 +63,9 @@ class SettingsActivity : Activity() {
     }
 
     private lateinit var swatchRow: LinearLayout
+    private val d by lazy { resources.displayMetrics.density }
+
+    private fun dp(v: Int) = (v * d).toInt()
 
     private fun hex(c: Int) = String.format("#%06X", c and 0xFFFFFF)
 
@@ -76,245 +79,306 @@ class SettingsActivity : Activity() {
         }
     }
 
+    private fun rounded(color: Int, r: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(r).toFloat()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val d = resources.displayMetrics.density
-        val pad = (20 * d).toInt()
+        val bg = getColor(R.color.kb_bg)
+        val surface = getColor(R.color.key_bg)
+        val line = getColor(R.color.key_special_bg)
         val fg = getColor(R.color.key_text)
         val muted = getColor(R.color.key_hint)
+        val accent = getColor(R.color.accent)
+        val onAccent = getColor(R.color.accent_text)
+
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        if (!Themes.isNight(this)) {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad * 2, pad, pad)
+            setPadding(dp(16), dp(28), dp(16), dp(28))
         }
 
         fun lp(top: Int = 0) = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = top }
+        ).apply { topMargin = dp(top) }
 
-        fun label(text: String, size: Float, color: Int, bold: Boolean = false, top: Int = 0) {
+        fun text(t: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
+            text = t
+            textSize = size
+            setTextColor(color)
+            if (bold) setTypeface(typeface, Typeface.BOLD)
+        }
+
+        fun section(title: String) {
             root.addView(
-                TextView(this).apply {
-                    this.text = text
-                    textSize = size
-                    setTextColor(color)
-                    if (bold) setTypeface(typeface, Typeface.BOLD)
+                text(title.uppercase(), 12f, muted, bold = true).apply {
+                    letterSpacing = 0.08f
+                    setPadding(dp(8), 0, 0, 0)
                 },
-                lp(top),
+                lp(24).apply { bottomMargin = dp(8) },
             )
         }
 
-        fun button(text: String, onClick: () -> Unit) {
-            root.addView(
-                Button(this).apply {
-                    this.text = text
-                    isAllCaps = false
+        fun card(): LinearLayout {
+            val c = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = rounded(surface, 16)
+            }
+            root.addView(c, lp())
+            return c
+        }
+
+        fun divider(c: LinearLayout) {
+            c.addView(
+                View(this).apply { setBackgroundColor(line) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1).apply {
+                    leftMargin = dp(16)
+                },
+            )
+        }
+
+        fun row(c: LinearLayout, first: Boolean, title: String, trailing: View? = null, onClick: (() -> Unit)? = null): TextView {
+            if (!first) divider(c)
+            val label = text(title, 16f, fg)
+            val r = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(52)
+                setPadding(dp(16), 0, dp(16), 0)
+                addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                if (trailing != null) addView(trailing)
+                if (onClick != null) {
+                    isClickable = true
                     setOnClickListener { onClick() }
-                },
-                lp((8 * d).toInt()),
-            )
+                }
+            }
+            c.addView(r, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            return label
         }
 
-        fun toggle(text: String, key: String) {
-            root.addView(
-                Switch(this).apply {
-                    this.text = text
-                    textSize = 16f
-                    setTextColor(fg)
-                    isChecked = Prefs.get(this@SettingsActivity, key)
-                    setOnCheckedChangeListener { _, on -> Prefs.set(this@SettingsActivity, key, on) }
-                },
-                lp((14 * d).toInt()),
-            )
+        fun chevron() = text("›", 22f, muted)
+
+        fun toggleRow(c: LinearLayout, first: Boolean, title: String, key: String) {
+            val sw = Switch(this).apply {
+                isChecked = Prefs.get(this@SettingsActivity, key)
+                setOnCheckedChangeListener { _, on -> Prefs.set(this@SettingsActivity, key, on) }
+            }
+            row(c, first, title, sw) { sw.toggle() }
         }
 
-        label("OpenRidmik", 30f, fg, bold = true)
-        label("Bangla keyboard with Avro phonetic and Probhat layouts.", 14f, muted, top = (4 * d).toInt())
+        // ---- header ----
+        root.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.BOTTOM
+                setPadding(dp(8), 0, dp(8), 0)
+                addView(text("OpenRidmik", 30f, fg, bold = true))
+                addView(
+                    text("v${Updater.currentVersion(this@SettingsActivity)}", 13f, muted).apply { setPadding(dp(10), 0, 0, dp(5)) },
+                )
+            },
+            lp(),
+        )
 
-        // ---- Updates ----
-        label("Updates", 18f, fg, bold = true, top = (24 * d).toInt())
-        val updStatus = TextView(this).apply {
-            textSize = 14f
-            setTextColor(muted)
-        }
-        root.addView(updStatus, lp((4 * d).toInt()))
-        val updDownload = Button(this).apply {
-            isAllCaps = false
+        // ---- update banner (only when a newer release exists) ----
+        val banner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(accent, 16)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
             visibility = View.GONE
         }
-        root.addView(updDownload, lp((8 * d).toInt()))
-        fun showUpdate(info: Updater.Info?, msg: String? = null) {
-            val cur = Updater.currentVersion(this)
-            if (info != null) {
-                updStatus.text = "Update available: v${info.version} (installed v$cur)"
-                updDownload.text = "Download v${info.version}"
-                updDownload.visibility = View.VISIBLE
-                updDownload.setOnClickListener {
-                    val url = info.apkUrl.ifEmpty { info.pageUrl }
-                    if (url.isNotEmpty()) startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                }
-            } else {
-                updStatus.text = msg ?: "Version v$cur"
-                updDownload.visibility = View.GONE
+        val bannerTitle = text("", 16f, onAccent, bold = true)
+        banner.addView(bannerTitle)
+        banner.addView(text("Tap to download", 13f, onAccent).apply { alpha = 0.85f })
+        root.addView(banner, lp(16))
+
+        fun showUpdate(info: Updater.Info?) {
+            if (info == null) {
+                banner.visibility = View.GONE
+                return
+            }
+            bannerTitle.text = "Update available · v${info.version}"
+            banner.visibility = View.VISIBLE
+            banner.setOnClickListener {
+                val url = info.apkUrl.ifEmpty { info.pageUrl }
+                if (url.isNotEmpty()) startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             }
         }
         showUpdate(Updater.available(this))
-        button("Check for updates") {
-            updStatus.text = "Checking…"
-            Updater.check(this, force = true) { r ->
-                when (r) {
-                    is Updater.Result.Available -> showUpdate(r.info)
-                    is Updater.Result.UpToDate -> showUpdate(null, "You're up to date (v${Updater.currentVersion(this)})")
-                    is Updater.Result.Failed -> showUpdate(null, "Couldn't check for updates. Try again later.")
-                }
-            }
-        }
-        // silent check every time the app opens
+        // silent check whenever the app opens
         Updater.check(this, force = true) { r -> if (r is Updater.Result.Available) showUpdate(r.info) }
 
-        label("Setup", 18f, fg, bold = true, top = (24 * d).toInt())
-        button("1. Enable OpenRidmik") {
+        // ---- keyboard ----
+        section("Keyboard")
+        val setup = card()
+        row(setup, true, "Enable OpenRidmik", chevron()) {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
         }
-        button("2. Switch to OpenRidmik") {
+        row(setup, false, "Switch keyboard", chevron()) {
             (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
         }
 
-        // ---- Bangla layout ----
-        label("Bangla layout", 18f, fg, bold = true, top = (24 * d).toInt())
-        val group = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-        val avroBtn = RadioButton(this).apply {
-            text = "Avro (phonetic) – type ami → আমি"
-            setTextColor(fg)
-            id = View.generateViewId()
+        // ---- layout (segmented) ----
+        section("Bangla layout")
+        val seg = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(surface, 14)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        val probhatBtn = RadioButton(this).apply {
-            text = "Probhat (প্রভাত) – fixed layout"
-            setTextColor(fg)
-            id = View.generateViewId()
+        root.addView(seg, lp())
+        fun refreshSeg() {
+            seg.removeAllViews()
+            for ((id, name) in listOf("avro" to "Avro · phonetic", "probhat" to "Probhat · প্রভাত")) {
+                val on = Prefs.layout(this) == id
+                seg.addView(
+                    text(name, 14f, if (on) onAccent else fg, bold = on).apply {
+                        gravity = Gravity.CENTER
+                        background = if (on) rounded(accent, 10) else null
+                        setOnClickListener {
+                            Prefs.setLayout(this@SettingsActivity, id)
+                            refreshSeg()
+                        }
+                    },
+                    LinearLayout.LayoutParams(0, dp(42), 1f),
+                )
+            }
         }
-        group.addView(avroBtn)
-        group.addView(probhatBtn)
-        group.check(if (Prefs.layout(this) == "probhat") probhatBtn.id else avroBtn.id)
-        group.setOnCheckedChangeListener { _, id ->
-            Prefs.setLayout(this, if (id == probhatBtn.id) "probhat" else "avro")
-        }
-        root.addView(group, lp((8 * d).toInt()))
+        refreshSeg()
 
-        // ---- Theme ----
-        label("Keyboard theme", 18f, fg, bold = true, top = (24 * d).toInt())
+        // ---- theme ----
+        section("Theme")
         swatchRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         root.addView(
             HorizontalScrollView(this).apply {
                 isHorizontalScrollBarEnabled = false
                 addView(swatchRow)
             },
-            lp((8 * d).toInt()),
+            lp(),
         )
         refreshSwatches(fg, muted)
 
-        label("Custom colours (hex, e.g. #1A73E8)", 14f, muted, top = (16 * d).toInt())
+        val customBox = card().apply { visibility = View.GONE }
         val cur = Themes.current(this)
-        fun field(name: String, initial: Int): EditText {
-            label(name, 13f, fg, top = (8 * d).toInt())
+        val fields = ArrayList<EditText>()
+        fun field(name: String, initial: Int, first: Boolean) {
             val e = EditText(this).apply {
                 setText(hex(initial))
                 setTextColor(fg)
+                textSize = 15f
+                gravity = Gravity.END
+                background = null
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                 setSingleLine()
+                minWidth = dp(110)
             }
-            root.addView(e, lp())
-            return e
+            fields.add(e)
+            row(customBox, first, name, e)
         }
-        val fBg = field("Background", Prefs.customColor(this, "bg", cur.bg))
-        val fKey = field("Keys", Prefs.customColor(this, "key", cur.key))
-        val fText = field("Text", Prefs.customColor(this, "text", cur.text))
-        val fAccent = field("Accent (Enter key)", Prefs.customColor(this, "accent", cur.accent))
-        button("Apply custom theme") {
-            val bg = parseColor(fBg.text.toString())
-            val key = parseColor(fKey.text.toString())
-            val text = parseColor(fText.text.toString())
-            val accent = parseColor(fAccent.text.toString())
-            if (bg == null || key == null || text == null || accent == null) {
-                Toast.makeText(this, "Enter colours like #1A73E8", Toast.LENGTH_SHORT).show()
+        field("Background", Prefs.customColor(this, "bg", cur.bg), true)
+        field("Keys", Prefs.customColor(this, "key", cur.key), false)
+        field("Text", Prefs.customColor(this, "text", cur.text), false)
+        field("Accent", Prefs.customColor(this, "accent", cur.accent), false)
+        row(customBox, false, "Apply custom theme") {
+            val v = fields.map { parseColor(it.text.toString()) }
+            if (v.any { it == null }) {
+                Toast.makeText(this, "Use colours like #1A73E8", Toast.LENGTH_SHORT).show()
             } else {
-                Prefs.setCustomColors(this, bg, key, text, accent)
+                Prefs.setCustomColors(this, v[0]!!, v[1]!!, v[2]!!, v[3]!!)
                 Prefs.setTheme(this, "custom")
                 refreshSwatches(fg, muted)
                 Toast.makeText(this, "Custom theme applied", Toast.LENGTH_SHORT).show()
             }
+        }.setTextColor(accent)
+        // toggle row sits above the (collapsed) custom colours card
+        val customToggle = text("Custom colours", 14f, accent, bold = true).apply {
+            setPadding(dp(8), dp(12), dp(8), dp(12))
+            setOnClickListener {
+                customBox.visibility = if (customBox.visibility == View.GONE) View.VISIBLE else View.GONE
+            }
         }
+        root.addView(customToggle, root.indexOfChild(customBox), lp())
 
-        // ---- Clipboard ----
-        label("Clipboard", 18f, fg, bold = true, top = (24 * d).toInt())
-        toggle("Clipboard history", "clipboard")
-        button("Clear clipboard history") {
+        // ---- preferences ----
+        section("Preferences")
+        val prefs = card()
+        toggleRow(prefs, true, "Vibrate on keypress", "haptic")
+        toggleRow(prefs, false, "Sound on keypress", "sound")
+        toggleRow(prefs, false, "Number row", "numberRow")
+        toggleRow(prefs, false, "Bangla digits", "banglaDigits")
+        toggleRow(prefs, false, "Word suggestions", "suggestions")
+        toggleRow(prefs, false, "Clipboard history", "clipboard")
+        row(prefs, false, "Clear clipboard history", chevron()) {
             ClipHistory.clearUnpinned(this)
             Toast.makeText(this, "Cleared (pinned items kept)", Toast.LENGTH_SHORT).show()
         }
 
-        label("Preferences", 18f, fg, bold = true, top = (24 * d).toInt())
-        toggle("Vibrate on keypress", "haptic")
-        toggle("Sound on keypress", "sound")
-        toggle("Number row", "numberRow")
-        toggle("Bangla digits in Bangla mode", "banglaDigits")
-        toggle("Word suggestions (Avro)", "suggestions")
+        // ---- about ----
+        section("About")
+        val about = card()
+        val status = text("", 14f, muted)
+        row(about, true, "Check for updates", status) {
+            status.text = "Checking…"
+            Updater.check(this, force = true) { r ->
+                when (r) {
+                    is Updater.Result.Available -> {
+                        status.text = "v${r.info.version}"
+                        showUpdate(r.info)
+                    }
+                    is Updater.Result.UpToDate -> status.text = "Up to date"
+                    is Updater.Result.Failed -> status.text = "Failed"
+                }
+            }
+        }
 
-        label("Try it", 18f, fg, bold = true, top = (24 * d).toInt())
+        // ---- telegram ----
         root.addView(
-            EditText(this).apply {
-                hint = "Type here, e.g. ami bangla likhte pari"
-                setTextColor(fg)
-                setHintTextColor(muted)
+            text("Join Telegram channel", 16f, Color.WHITE, bold = true).apply {
+                gravity = Gravity.CENTER
+                background = rounded(Color.parseColor("#229ED9"), 16)
+                setOnClickListener {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/projectredfox")))
+                }
             },
-            lp(),
-        )
-
-        label(
-            "Tips: select text, then press and hold X to cut, C to copy, V to paste. " +
-                "The clipboard button opens the clipboard history (tap the pin to keep an item), the palette switches theme, " +
-                "and the layout button switches Avro / Probhat. The smiley key next to the globe opens emoji " +
-                "by category (hold a hand or person emoji for skin tones). " +
-                "Tap the globe to switch Bangla/English (hold for the keyboard picker). " +
-                "In Avro use capital letters for T, D, N, S, R, I, U, O.",
-            13f, muted, top = (20 * d).toInt(),
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
         )
 
         setContentView(
             ScrollView(this).apply {
-                setBackgroundColor(getColor(R.color.kb_bg))
+                setBackgroundColor(bg)
+                isVerticalScrollBarEnabled = false
                 addView(root)
             },
         )
     }
 
     private fun refreshSwatches(fg: Int, muted: Int) {
-        val d = resources.displayMetrics.density
         swatchRow.removeAllViews()
         val selectedId = Prefs.theme(this)
         for (id in Themes.ids(this)) {
             val t = Themes.resolve(this, id)
             val cell = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                gravity = android.view.Gravity.CENTER_HORIZONTAL
-                setPadding((4 * d).toInt(), 0, (4 * d).toInt(), 0)
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(0, 0, dp(10), 0)
             }
-            cell.addView(
-                Swatch(this, t, id == selectedId),
-                LinearLayout.LayoutParams((84 * d).toInt(), (56 * d).toInt()),
-            )
+            cell.addView(Swatch(this, t, id == selectedId), LinearLayout.LayoutParams(dp(84), dp(56)))
             cell.addView(
                 TextView(this).apply {
                     text = Themes.label(id)
                     textSize = 12f
                     setTextColor(if (id == selectedId) fg else muted)
-                    gravity = android.view.Gravity.CENTER
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(4), 0, 0)
                 },
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                ),
             )
             cell.setOnClickListener {
                 Prefs.setTheme(this, id)
