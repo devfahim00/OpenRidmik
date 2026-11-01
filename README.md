@@ -73,8 +73,11 @@ Avro phonetic · Probhat · Emoji · Clipboard manager · Number pad · Themes
 | `e` `O` | ে এ / ো ও | `ng` | ং |
 | `oi` `OI` | ৈ ঐ / ৌ ঔ | `:` `^` | ঃ ঁ |
 | `rri` | ঋ ৃ | `` ` `` | break a conjunct |
+| `qq` | ঁ | `aa` | আ / া |
 
-Examples: `ami` → আমি · `bangla` → বাংলা · `kkh` → ক্ষ
+Examples: `ami` → আমি · `bangla` → বাংলা · `kkh` → ক্ষ · `baqqsh` → বাঁশ
+
+From the symbols page, `$` types ৳, and `:` / `^` type ঃ / ঁ right after a Bangla letter. Hold the key for the plain character.
 
 The complete rule table is plain text in [`avro_rules.txt`](app/src/main/assets/avro_rules.txt), so you can tweak it without touching any code.
 

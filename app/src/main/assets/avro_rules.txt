@@ -4,6 +4,7 @@
 # S = standalone symbol. "-" means empty.
 V o অ -
 V a আ া
+V aa আ া
 V i ই ি
 V I ঈ ী
 V ii ঈ ী
@@ -26,6 +27,7 @@ C gh ঘ
 C Ng ঙ
 C c চ
 C ch ছ
+C chh ছ
 C j জ
 C jh ঝ
 C NG ঞ
@@ -58,7 +60,9 @@ C R ড়
 C Rh ঢ়
 J y য় য
 J Y য় য
+J Z য য
 C x ক্স
+C q ক
 C kkh ক্ষ
 C GG জ্ঞ
 C ngk ঙ্ক
@@ -72,6 +76,7 @@ W w ও ব
 S ng ং
 S : ঃ
 S ^ ঁ
+S qq ঁ
 S . ।
 S .. .
 S $ ৳

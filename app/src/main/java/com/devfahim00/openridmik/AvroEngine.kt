@@ -50,6 +50,20 @@ class AvroEngine(rulesText: String) {
                 }
                 l--
             }
+            if (rule == null && input[i].isUpperCase()) {
+                // no dedicated capital rule (e.g. "Ami", "Kemon"): fall back to the lowercase letter's rule
+                val lc = input[i].lowercaseChar()
+                var l2 = minOf(maxLen, input.length - i)
+                while (l2 > 0) {
+                    val r = rules[lc.toString() + input.substring(i + 1, i + l2)]
+                    if (r != null) {
+                        rule = r
+                        len = l2
+                        break
+                    }
+                    l2--
+                }
+            }
             if (rule == null) {
                 out.append(input[i])
                 prevCons = false

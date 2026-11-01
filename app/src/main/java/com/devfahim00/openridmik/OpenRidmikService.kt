@@ -435,10 +435,26 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             updateComposing(ic)
         } else {
             finishComposing(ic)
-            ic.commitText(t, 1)
+            ic.commitText(avroSymbol(ic, t), 1)
             clearBar()
         }
         afterChar()
+    }
+
+    /**
+     * Avro symbols typed from the symbols page: `$` gives ৳, and `:` / `^` give visarga ঃ / chandrabindu ঁ
+     * when they directly follow a Bangla letter. Hold the key to type the plain character instead.
+     */
+    private fun avroSymbol(ic: InputConnection, t: String): String {
+        if (!bangla || probhat || t.length != 1) return t
+        val prev = ic.getTextBeforeCursor(1, 0)?.firstOrNull()
+        val afterBangla = prev != null && prev in '\u0980'..'\u09FF'
+        return when {
+            t == "$" -> "৳"
+            t == ":" && afterBangla -> "ঃ"
+            t == "^" && afterBangla -> "ঁ"
+            else -> t
+        }
     }
 
     private fun afterChar() {

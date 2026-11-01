@@ -28,7 +28,10 @@ object Layouts {
 
     private fun spacer(weight: Float) = Key("", 0, weight = weight, spacer = true)
 
-    private fun plain(c: Char) = Key(c.toString(), c.code, c.toString())
+    /** Keys that Avro remaps ($ : ^) type the plain character on long-press. */
+    private fun plain(c: Char) =
+        if (c == '$' || c == ':' || c == '^') Key(c.toString(), c.code, c.toString(), alt = c.toString())
+        else Key(c.toString(), c.code, c.toString())
 
     private fun letters(chars: String, shift: Boolean, bangla: Boolean): List<Key> = chars.map { raw ->
         val c = if (shift) raw.uppercaseChar() else raw
