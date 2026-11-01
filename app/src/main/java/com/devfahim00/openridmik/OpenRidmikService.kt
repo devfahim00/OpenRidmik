@@ -111,6 +111,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             return v
         }
         tool(Ico.CLIPBOARD) { showClipboard() }
+        tool(Ico.SMILE) { showEmoji() }
         tool(Ico.NUMPAD) { showNumpad() }
         tool(Ico.PALETTE) { cycleTheme() }
         gearBtn = tool(Ico.GEAR) { openSettings() }

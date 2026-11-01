@@ -95,14 +95,13 @@ object Layouts {
             listOf(
                 first,
                 special("", Codes.LANG),
-                special("", Codes.EMOJI),
                 comma,
-                Key("", Codes.SPACE, " ", weight = 3f),
+                Key("", Codes.SPACE, " ", weight = 4f),
                 period,
                 enter,
             )
         } else {
-            listOf(first, special("", Codes.EMOJI), comma, Key("", Codes.SPACE, " ", weight = 4f), period, enter)
+            listOf(first, comma, Key("", Codes.SPACE, " ", weight = 5f), period, enter)
         }
     }
 
