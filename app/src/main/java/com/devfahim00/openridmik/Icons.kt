@@ -53,6 +53,14 @@ class IconView(ctx: Context, var kind: Int) : View(ctx) {
             field = v
             invalidate()
         }
+    /** Small red dot in the top-right corner (e.g. "update available"). */
+    var badge: Boolean = false
+        set(v) {
+            field = v
+            invalidate()
+        }
+    private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(0xE5, 0x39, 0x35) }
+
     /** Fraction of the view's smaller side used by the 24-unit grid. */
     var scale: Float = 0.55f
 
@@ -73,6 +81,10 @@ class IconView(ctx: Context, var kind: Int) : View(ctx) {
         c.scale(k, k)
         drawIcon(c)
         c.restore()
+        if (badge) {
+            val m = minOf(width, height)
+            c.drawCircle(width / 2f + m * 0.2f, height / 2f - m * 0.2f, m * 0.09f, badgePaint)
+        }
     }
 
     private fun dot(c: Canvas, x: Float, y: Float, r: Float) = c.drawCircle(x, y, r, fill)

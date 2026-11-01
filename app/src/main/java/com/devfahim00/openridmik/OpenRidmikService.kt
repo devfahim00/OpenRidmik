@@ -42,6 +42,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private val toolbarButtons = ArrayList<View>()
     private var panel: View? = null
     private var clipList: LinearLayout? = null
+    private var gearBtn: IconView? = null
 
     private var bangla = true
     private var probhat = false
@@ -101,13 +102,14 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             gravity = Gravity.CENTER_VERTICAL
         }
         toolbarButtons.clear()
-        fun tool(kind: Int, onClick: () -> Unit) {
+        fun tool(kind: Int, onClick: () -> Unit): IconView {
             val v = IconView(this, kind).apply {
                 color = theme.text
                 setOnClickListener { onClick() }
             }
             toolbarButtons.add(v)
             toolbar.addView(v, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+            return v
         }
         tool(Ico.CLIPBOARD) { showClipboard() }
         tool(Ico.NUMPAD) { showNumpad() }
@@ -121,7 +123,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         }
         toolbarButtons.add(layoutBtn)
         toolbar.addView(layoutBtn, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-        tool(Ico.GEAR) { openSettings() }
+        gearBtn = tool(Ico.GEAR) { openSettings() }
+        refreshUpdateBadge()
 
         suggestionBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -150,6 +153,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        refreshUpdateBadge()
+        Updater.check(this, force = false) { refreshUpdateBadge() }
         raw.clear()
         clearBar()
         hidePanel()
@@ -229,6 +234,10 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         Prefs.setTheme(this, next)
         applyTheme()
         Toast.makeText(this, Themes.label(next), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun refreshUpdateBadge() {
+        gearBtn?.badge = Updater.available(this) != null
     }
 
     private fun openSettings() {

@@ -132,6 +132,47 @@ class SettingsActivity : Activity() {
         label("OpenRidmik", 30f, fg, bold = true)
         label("Bangla keyboard with Avro phonetic and Probhat layouts.", 14f, muted, top = (4 * d).toInt())
 
+        // ---- Updates ----
+        label("Updates", 18f, fg, bold = true, top = (24 * d).toInt())
+        val updStatus = TextView(this).apply {
+            textSize = 14f
+            setTextColor(muted)
+        }
+        root.addView(updStatus, lp((4 * d).toInt()))
+        val updDownload = Button(this).apply {
+            isAllCaps = false
+            visibility = View.GONE
+        }
+        root.addView(updDownload, lp((8 * d).toInt()))
+        fun showUpdate(info: Updater.Info?, msg: String? = null) {
+            val cur = Updater.currentVersion(this)
+            if (info != null) {
+                updStatus.text = "Update available: v${info.version} (installed v$cur)"
+                updDownload.text = "Download v${info.version}"
+                updDownload.visibility = View.VISIBLE
+                updDownload.setOnClickListener {
+                    val url = info.apkUrl.ifEmpty { info.pageUrl }
+                    if (url.isNotEmpty()) startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                }
+            } else {
+                updStatus.text = msg ?: "Version v$cur"
+                updDownload.visibility = View.GONE
+            }
+        }
+        showUpdate(Updater.available(this))
+        button("Check for updates") {
+            updStatus.text = "Checking…"
+            Updater.check(this, force = true) { r ->
+                when (r) {
+                    is Updater.Result.Available -> showUpdate(r.info)
+                    is Updater.Result.UpToDate -> showUpdate(null, "You're up to date (v${Updater.currentVersion(this)})")
+                    is Updater.Result.Failed -> showUpdate(null, "Couldn't check for updates. Try again later.")
+                }
+            }
+        }
+        // silent check every time the app opens
+        Updater.check(this, force = true) { r -> if (r is Updater.Result.Available) showUpdate(r.info) }
+
         label("Setup", 18f, fg, bold = true, top = (24 * d).toInt())
         button("1. Enable OpenRidmik") {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
