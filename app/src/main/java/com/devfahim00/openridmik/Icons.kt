@@ -25,6 +25,7 @@ object Ico {
     const val HEART = 14
     const val FLAG = 15
     const val DELETE = 16
+    const val NUMPAD = 17
 
     fun forGroup(name: String): Int = when (name) {
         "Smileys & Emotion" -> SMILE
@@ -198,6 +199,10 @@ class IconView(ctx: Context, var kind: Int) : View(ctx) {
                     cubicTo(3f, 4f, -1f, -2f, -6f, 1f)
                 }
                 c.drawPath(p, stroke)
+            }
+            Ico.NUMPAD -> {
+                c.drawRoundRect(RectF(-10f, -8f, 10f, 8f), 3f, 3f, stroke)
+                for (i in -1..1) for (j in -1..1) dot(c, i * 5f, j * 4f, 1.2f)
             }
             Ico.DELETE -> {
                 val p = Path().apply {

@@ -136,6 +136,28 @@ object Layouts {
         return rows
     }
 
+    /** Number pad: Bangla digit row on top, operators on the left, big 0-9 block. */
+    fun numpad(): List<List<Key>> {
+        fun k(t: String, weight: Float = 1f) = Key(t, t[0].code, t, weight = weight, special = !t[0].isDigit())
+        val rows = ArrayList<List<Key>>()
+        rows.add(digitRow(true))
+        rows.add(listOf(k("+"), k("1"), k("2"), k("3"), k("%")))
+        rows.add(listOf(k("-"), k("4"), k("5"), k("6"), k("/")))
+        rows.add(
+            listOf(k("*"), k("7"), k("8"), k("9"), special("", Codes.DELETE, 1f, repeat = true)),
+        )
+        rows.add(
+            listOf(
+                special("ABC", Codes.ALPHA, 1f),
+                Key(".", '.'.code, "."),
+                Key("0", '0'.code, "0"),
+                Key("", Codes.SPACE, " "),
+                Key("", Codes.ENTER, "\n", special = true),
+            ),
+        )
+        return rows
+    }
+
     fun symbols(page: Int): List<List<Key>> {
         val rows = ArrayList<List<Key>>()
         rows.add("1234567890".map { plain(it) })

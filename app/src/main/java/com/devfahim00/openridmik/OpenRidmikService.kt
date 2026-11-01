@@ -28,7 +28,7 @@ import android.widget.Toast
 
 class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
-    private enum class Mode { ALPHA, SYM1, SYM2 }
+    private enum class Mode { ALPHA, SYM1, SYM2, NUM }
 
     private lateinit var avro: AvroEngine
     private lateinit var dict: Suggester
@@ -110,6 +110,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             toolbar.addView(v, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
         tool(Ico.CLIPBOARD) { showClipboard() }
+        tool(Ico.NUMPAD) { showNumpad() }
         tool(Ico.PALETTE) { cycleTheme() }
         layoutBtn = TextView(this).apply {
             textSize = 14f
@@ -247,6 +248,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             )
             Mode.SYM1 -> Layouts.symbols(1)
             Mode.SYM2 -> Layouts.symbols(2)
+            Mode.NUM -> Layouts.numpad()
         }
         kbView.haptic = Prefs.get(this, "haptic")
         kbView.enterLabel = enterLabel
@@ -272,6 +274,15 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         val show = barHasItems && mode == Mode.ALPHA && !passwordField && Prefs.get(this, "suggestions")
         suggestionBar.visibility = if (noPanel && show) View.VISIBLE else View.GONE
         toolbar.visibility = if (noPanel && !show) View.VISIBLE else View.GONE
+    }
+
+    private fun showNumpad() {
+        currentInputConnection?.let { finishComposing(it) }
+        if (panel != null) hidePanel()
+        clearBar()
+        mode = Mode.NUM
+        shift = 0
+        rebuild()
     }
 
     private fun toggleLayout() {

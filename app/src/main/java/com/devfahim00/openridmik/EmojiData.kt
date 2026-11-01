@@ -46,7 +46,8 @@ object EmojiData {
             c.assets.open("emoji.txt").bufferedReader().useLines { lines ->
                 for (line in lines) {
                     if (line.isBlank()) continue
-                    if (line.startsWith("#")) {
+                    // "#Group" headers only: keycap emoji such as "#️⃣" also start with '#'
+                    if (line.length > 1 && line[0] == '#' && line[1].isLetter()) {
                         flush()
                         name = line.substring(1).trim()
                         items = ArrayList()
@@ -61,8 +62,29 @@ object EmojiData {
         } catch (ex: Exception) {
             // asset missing: fall back to an empty catalogue
         }
-        cache = result
-        return result
+        val merged = mergeGroups(result)
+        cache = merged
+        return merged
+    }
+
+    /** People & Body goes into the first (face) group; Symbols goes into Objects (bulb). */
+    private fun mergeGroups(src: List<Group>): List<Group> {
+        fun find(n: String) = src.firstOrNull { it.name == n }
+        val people = find("People & Body")
+        val symbols = find("Symbols")
+        val out = ArrayList<Group>()
+        for (g in src) {
+            when {
+                g === people || g === symbols -> continue
+                g.name == "Smileys & Emotion" && people != null -> out.add(Group(g.name, g.icon, g.items + people.items))
+                g.name == "Objects" && symbols != null -> out.add(Group(g.name, g.icon, g.items + symbols.items))
+                else -> out.add(g)
+            }
+        }
+        // no Smileys/Objects group to merge into: keep the originals
+        if (find("Smileys & Emotion") == null && people != null) out.add(0, people)
+        if (find("Objects") == null && symbols != null) out.add(symbols)
+        return out
     }
 
     /** Inserts a skin-tone modifier after the first code point (dropping a variation selector if present). */
