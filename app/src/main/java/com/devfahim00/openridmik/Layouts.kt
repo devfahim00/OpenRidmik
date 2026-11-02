@@ -80,6 +80,32 @@ object Layouts {
         }
     }
 
+
+    // ---- Jatiyo (national Bangla layout, জাতীয়) ----
+
+    /** [n] normal value, [s] shifted value, [nh] / [sh] long-press (and hint) on the normal / shifted key. */
+    private class JK(val n: String, val s: String, val nh: String? = null, val sh: String? = null)
+
+    private val jatiyoRow1 = listOf(
+        JK("ঙ", "ং", "ং"), JK("য", "\u09DF", "\u09DF"), JK("ড", "ঢ", "ঢ"), JK("প", "ফ", "ফ"), JK("ট", "ঠ", "ঠ"),
+        JK("চ", "ছ", "ছ"), JK("জ", "ঝ", "ঝ"), JK("হ", "ঞ", "ঞ"), JK("গ", "ঘ", "ঘ"), JK("\u09DC", "\u09DD", "\u09DD"),
+    )
+    private val jatiyoRow2 = listOf(
+        JK("\u09C3", "ঋ", "ঋ"), JK("\u09C1", "\u09C2", "উ", "ঊ"), JK("\u09BF", "\u09C0", "ই", "ঈ"),
+        JK("ব", "ভ", "ভ"), JK("\u09CD", "\u0981"), JK("\u09BE", "অ", "আ"), JK("ক", "খ", "খ"),
+        JK("ত", "থ", "\u09CE"), JK("দ", "ধ", "ধ"),
+    )
+    private val jatiyoRow3 = listOf(
+        JK("\u0981", "ঃ", "ঃ"), JK("\u09CB", "\u09CC", "ও", "ঔ"), JK("\u09C7", "\u09C8", "এ", "ঐ"),
+        JK("র", "\u09CD\u09B0", "ল", "ল"), JK("ন", "ণ", "ণ"), JK("স", "ষ", "ষ"), JK("ম", "শ", "শ"),
+    )
+
+    private fun jatiyoKey(k: JK, shift: Boolean): Key {
+        val v = if (shift) k.s else k.n
+        val h = if (shift) k.sh else k.nh
+        return Key(disp(v), v.codePointAt(0), v, hint = h?.let { disp(it) }, alt = h)
+    }
+
     private fun digitRow(bangla: Boolean): List<Key> = "1234567890".map { d ->
         val t = if (bangla) AvroEngine.banglaDigit(d) else d.toString()
         Key(t, d.code, t, hint = if (bangla) d.toString() else null, alt = if (bangla) d.toString() else null)
@@ -113,10 +139,19 @@ object Layouts {
         numberRow: Boolean,
         banglaDigits: Boolean,
         probhat: Boolean = false,
+        jatiyo: Boolean = false,
     ): List<List<Key>> {
         val rows = ArrayList<List<Key>>()
         if (numberRow) rows.add(digitRow(bangla && banglaDigits))
-        if (bangla && probhat) {
+        if (bangla && jatiyo) {
+            rows.add(jatiyoRow1.map { jatiyoKey(it, shift) })
+            rows.add(listOf(spacer(0.5f)) + jatiyoRow2.map { jatiyoKey(it, shift) } + listOf(spacer(0.5f)))
+            rows.add(
+                listOf(special("", Codes.SHIFT, 1.5f)) +
+                    jatiyoRow3.map { jatiyoKey(it, shift) } +
+                    listOf(special("", Codes.DELETE, 1.5f, repeat = true)),
+            )
+        } else if (bangla && probhat) {
             rows.add(probhatRow1.map { probhatKey(it, shift) })
             rows.add(listOf(spacer(1.5f)) + probhatRow2.map { probhatKey(it, shift) } + listOf(spacer(1.5f)))
             rows.add(

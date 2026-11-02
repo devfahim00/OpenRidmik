@@ -60,6 +60,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     private var bangla = true
     private var probhat = false
+    private var jatiyo = false
     private var forceLatin = false
     private var passwordField = false
     private var mode = Mode.ALPHA
@@ -72,10 +73,17 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private var clipboard: ClipboardManager? = null
     private val ui = Handler(Looper.getMainLooper())
 
-    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClip() }
+    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener {
+        try {
+            captureClip()
+        } catch (e: Exception) {
+            CrashLog.record(this, "captureClip", e)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(applicationContext)
         audio = getSystemService(AUDIO_SERVICE) as AudioManager
         clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipboard?.addPrimaryClipChangedListener(clipListener)
@@ -200,6 +208,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         )
         bangla = if (forceLatin) false else Prefs.isBangla(this)
         probhat = Prefs.layout(this) == "probhat"
+        jatiyo = Prefs.layout(this) == "jatiyo"
         if (!forceLatin) {
             // a layout the user switched off in settings is never left active
             val on = Prefs.enabledLangs(this)
@@ -314,11 +323,14 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                 shift > 0, bangla,
                 Prefs.get(this, "numberRow"), Prefs.get(this, "banglaDigits"),
                 probhat,
+                jatiyo,
             )
             Mode.SYM1 -> Layouts.symbols(1)
             Mode.SYM2 -> Layouts.symbols(2)
             Mode.NUM -> Layouts.numpad()
         }
+        val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        kbView.heightPercent = Prefs.heightPercent(this, land)
         kbView.haptic = Prefs.get(this, "haptic")
         kbView.enterLabel = enterLabel
         kbView.shiftState = shift
@@ -326,6 +338,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         kbView.spaceLabel = when {
             !bangla -> "English"
             probhat -> "Probhat"
+            jatiyo -> "জাতীয়"
             else -> "Avro"
         }
         kbView.rows = rows
@@ -357,6 +370,17 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     // ---- key handling ----
 
     override fun onKey(key: Key) {
+        try {
+            handleKey(key)
+        } catch (e: Exception) {
+            // never let one bad key press take the whole keyboard process down
+            CrashLog.record(this, "onKey", e)
+            raw.clear()
+            clearBar()
+        }
+    }
+
+    private fun handleKey(key: Key) {
         val ic = currentInputConnection ?: return
         if (toolbarOpen) {
             toolbarOpen = false
@@ -406,17 +430,32 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onSpaceSwipe(dir: Int) {
+        try {
+            spaceSwipe(dir)
+        } catch (e: Exception) {
+            CrashLog.record(this, "spaceSwipe", e)
+        }
+    }
+
+    private fun spaceSwipe(dir: Int) {
         if (mode != Mode.ALPHA) return
         val on = Prefs.enabledLangs(this)
         if (on.size < 2) return
         val i = on.indexOf(currentLang())
         // dir is +1 for a left-to-right swipe and -1 for right-to-left.
-        // Right-to-left goes forward (English -> Avro -> Probhat -> English), left-to-right goes back.
+        // Right-to-left goes forward (English -> Avro -> Probhat -> Jatiyo -> English), left-to-right goes back.
         val next = if (i < 0) on.first() else on[(i - dir + on.size) % on.size]
         setLang(next)
     }
 
-    override fun onLongPress(key: Key): Boolean {
+    override fun onLongPress(key: Key): Boolean = try {
+        longPress(key)
+    } catch (e: Exception) {
+        CrashLog.record(this, "onLongPress", e)
+        false
+    }
+
+    private fun longPress(key: Key): Boolean {
         val ic = currentInputConnection ?: return false
         return when {
             key.action != 0 -> {
@@ -439,6 +478,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     // ---- cut / copy / paste ----
 
+    private val MAX_CLIP_CHARS = 50000
+
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
     private fun clipAction(ic: InputConnection, action: Int) {
@@ -452,8 +493,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                 var after = ""
                 var whole = false
                 if (text.isNullOrEmpty()) {
-                    before = ic.getTextBeforeCursor(100000, 0)?.toString() ?: ""
-                    after = ic.getTextAfterCursor(100000, 0)?.toString() ?: ""
+                    before = ic.getTextBeforeCursor(MAX_CLIP_CHARS, 0)?.toString() ?: ""
+                    after = ic.getTextAfterCursor(MAX_CLIP_CHARS, 0)?.toString() ?: ""
                     text = before + after
                     whole = true
                 }
@@ -461,8 +502,14 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                     toast("Nothing to ${if (action == Codes.CUT) "cut" else "copy"}")
                     return
                 }
-                clipboard?.setPrimaryClip(ClipData.newPlainText("text", text))
-                ClipHistory.add(this, text)
+                try {
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("text", text))
+                } catch (e: Exception) {
+                    // too large for the system clipboard (binder limit)
+                    toast("Text is too long to copy")
+                    return
+                }
+                if (text.length <= 3000) ClipHistory.add(this, text)
                 if (action == Codes.CUT) {
                     if (whole) ic.deleteSurroundingText(before.length, after.length) else ic.commitText("", 1)
                 } else if (whole) {
@@ -517,7 +564,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     private fun handleChar(ic: InputConnection, key: Key) {
         val t = key.out
-        if (bangla && !probhat && mode == Mode.ALPHA && isPhonetic(t)) {
+        if (bangla && !probhat && !jatiyo && mode == Mode.ALPHA && isPhonetic(t)) {
             raw.append(t)
             updateComposing(ic)
         } else {
@@ -533,7 +580,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
      * when they directly follow a Bangla letter. Hold the key to type the plain character instead.
      */
     private fun avroSymbol(ic: InputConnection, t: String): String {
-        if (!bangla || probhat || t.length != 1) return t
+        if (!bangla || probhat || jatiyo || t.length != 1) return t
         val prev = ic.getTextBeforeCursor(1, 0)?.firstOrNull()
         val afterBangla = prev != null && prev in '\u0980'..'\u09FF'
         return when {
@@ -588,8 +635,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         }
     }
 
-    /** 0 = English, 1 = Avro (phonetic), 2 = Probhat. */
-    private fun currentLang(): Int = if (!bangla) 0 else if (probhat) 2 else 1
+    /** 0 = English, 1 = Avro (phonetic), 2 = Probhat, 3 = Jatiyo. */
+    private fun currentLang(): Int = if (!bangla) 0 else if (probhat) 2 else if (jatiyo) 3 else 1
 
     private fun applyLangFlags(idx: Int) {
         when (idx) {
@@ -597,10 +644,17 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             1 -> {
                 bangla = true
                 probhat = false
+                jatiyo = false
+            }
+            2 -> {
+                bangla = true
+                probhat = true
+                jatiyo = false
             }
             else -> {
                 bangla = true
-                probhat = true
+                probhat = false
+                jatiyo = true
             }
         }
     }
@@ -609,7 +663,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private fun setLang(idx: Int) {
         currentInputConnection?.let { finishComposing(it) }
         applyLangFlags(idx)
-        if (bangla) Prefs.setLayout(this, if (probhat) "probhat" else "avro")
+        if (bangla) Prefs.setLayout(this, if (probhat) "probhat" else if (jatiyo) "jatiyo" else "avro")
         if (!forceLatin) Prefs.setBangla(this, bangla)
         shift = 0
         rebuild()

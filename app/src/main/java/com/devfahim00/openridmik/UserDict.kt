@@ -41,10 +41,20 @@ object UserDict {
     fun save(c: Context) {
         if (!loaded || dirty == 0) return
         dirty = 0
-        val o = JSONObject()
-        o.put("w", JSONObject(words as Map<*, *>))
-        o.put("p", JSONObject(pairs as Map<*, *>))
-        sp(c).edit().putString("data", o.toString()).apply()
+        val w = HashMap(words)
+        val p = HashMap(pairs)
+        val app = c.applicationContext
+        // serialising a few thousand entries is kept off the main thread so typing never stalls
+        Thread {
+            try {
+                val o = JSONObject()
+                o.put("w", JSONObject(w as Map<*, *>))
+                o.put("p", JSONObject(p as Map<*, *>))
+                sp(app).edit().putString("data", o.toString()).apply()
+            } catch (e: Exception) {
+                CrashLog.record(app, "UserDict.save", e)
+            }
+        }.start()
     }
 
     private fun prune(map: HashMap<String, Int>, max: Int) {

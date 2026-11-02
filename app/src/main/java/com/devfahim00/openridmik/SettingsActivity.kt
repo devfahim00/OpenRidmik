@@ -1,6 +1,9 @@
 package com.devfahim00.openridmik
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.AlertDialog
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -10,6 +13,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
@@ -20,9 +24,13 @@ import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SettingsActivity : Activity() {
 
@@ -63,6 +71,7 @@ class SettingsActivity : Activity() {
     }
 
     private lateinit var swatchRow: LinearLayout
+    private val heightBars = ArrayList<SeekBar>()
     private val d by lazy { resources.displayMetrics.density }
 
     private fun dp(v: Int) = (v * d).toInt()
@@ -237,7 +246,7 @@ class SettingsActivity : Activity() {
         root.addView(seg, lp())
         fun refreshSeg() {
             seg.removeAllViews()
-            for ((id, name) in listOf("avro" to "Avro", "probhat" to "Probhat · প্রভাত")) {
+            for ((id, name) in listOf("avro" to "Avro", "probhat" to "Probhat", "jatiyo" to "জাতীয়")) {
                 val on = Prefs.layout(this) == id
                 seg.addView(
                     text(name, 14f, if (on) onAccent else fg, bold = on).apply {
@@ -316,7 +325,7 @@ class SettingsActivity : Activity() {
                 setOnCheckedChangeListener { b, on ->
                     Prefs.set(this@SettingsActivity, key, on)
                     // at least one layout has to stay on
-                    if (listOf("lang_en", "lang_avro", "lang_probhat").none { Prefs.get(this@SettingsActivity, it) }) {
+                    if (listOf("lang_en", "lang_avro", "lang_probhat", "lang_jatiyo").none { Prefs.get(this@SettingsActivity, it) }) {
                         Prefs.set(this@SettingsActivity, key, true)
                         b.isChecked = true
                         Toast.makeText(this@SettingsActivity, "Keep at least one layout on", Toast.LENGTH_SHORT).show()
@@ -328,8 +337,56 @@ class SettingsActivity : Activity() {
         langRow(true, "English", "lang_en")
         langRow(false, "Avro", "lang_avro")
         langRow(false, "Probhat", "lang_probhat")
+        langRow(false, "Jatiyo · জাতীয়", "lang_jatiyo")
         root.addView(
             text("Hold the space bar and slide left or right to switch between the layouts that are on.", 12f, muted),
+            lp(6),
+        )
+
+        // ---- keyboard height ----
+        section("Keyboard height")
+        val hcard = card()
+        fun heightRow(first: Boolean, title: String, landscape: Boolean) {
+            if (!first) divider(hcard)
+            val value = text("", 14f, muted)
+            val head = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(text(title, 16f, fg), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(value)
+            }
+            val bar = SeekBar(this).apply {
+                max = Prefs.HEIGHT_MAX - Prefs.HEIGHT_MIN
+                progress = Prefs.heightPercent(this@SettingsActivity, landscape) - Prefs.HEIGHT_MIN
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                        val pct = Prefs.HEIGHT_MIN + p
+                        value.text = "$pct%"
+                        if (fromUser) Prefs.setHeightPercent(this@SettingsActivity, landscape, pct)
+                    }
+                    override fun onStartTrackingTouch(sb: SeekBar) {}
+                    override fun onStopTrackingTouch(sb: SeekBar) {}
+                })
+            }
+            value.text = "${Prefs.HEIGHT_MIN + bar.progress}%"
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(12), dp(16), dp(8))
+                addView(head)
+                addView(bar)
+            }
+            hcard.addView(box, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            heightBars.add(bar)
+        }
+        heightRow(true, "Portrait", false)
+        heightRow(false, "Landscape", true)
+        row(hcard, false, "Reset to default", chevron()) {
+            Prefs.setHeightPercent(this, false, 100)
+            Prefs.setHeightPercent(this, true, 100)
+            for (b in heightBars) b.progress = 100 - Prefs.HEIGHT_MIN
+        }
+        root.addView(
+            text("Makes the keys taller or shorter. Applies the next time the keyboard opens.", 12f, muted),
             lp(6),
         )
 
@@ -346,6 +403,33 @@ class SettingsActivity : Activity() {
             ClipHistory.clearUnpinned(this)
             Toast.makeText(this, "Cleared (pinned items kept)", Toast.LENGTH_SHORT).show()
         }
+
+        // ---- keyboard keeps switching? ----
+        section("Keyboard keeps switching?")
+        val diag = card()
+        row(diag, true, "Allow background running", chevron()) {
+            // battery optimisation is the most common reason Android kills the keyboard and falls back to another one
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (e: Exception) {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            }
+        }
+        row(diag, false, "Why did the keyboard stop?", chevron()) {
+            AlertDialog.Builder(this)
+                .setTitle("Keyboard stop reasons")
+                .setMessage(diagnostics())
+                .setPositiveButton("OK", null)
+                .setNeutralButton("Clear") { _, _ -> CrashLog.clear(this) }
+                .show()
+        }
+        root.addView(
+            text(
+                "If the system switches to another keyboard after long use, it is usually because the phone killed the keyboard to save battery or memory. Set OpenRidmik to \"No restrictions\" / allow autostart, and keep it out of the recents-clear list.",
+                12f, muted,
+            ),
+            lp(6),
+        )
 
         // ---- about ----
         section("About")
@@ -384,6 +468,46 @@ class SettingsActivity : Activity() {
                 addView(root)
             },
         )
+    }
+
+    /** Recent reasons Android ended the keyboard process (API 30+), plus the last crash the app itself caught. */
+    private fun diagnostics(): String {
+        val sb = StringBuilder()
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val am = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+                val fmt = SimpleDateFormat("MM-dd HH:mm", Locale.US)
+                val list = am.getHistoricalProcessExitReasons(packageName, 0, 8)
+                if (list.isEmpty()) sb.append("No process exits recorded.\n")
+                for (r in list) {
+                    sb.append(fmt.format(Date(r.timestamp))).append("  ").append(reasonName(r.reason))
+                    if (!r.description.isNullOrEmpty()) sb.append(" (").append(r.description).append(")")
+                    sb.append("\n")
+                }
+            } catch (e: Exception) {
+                sb.append("Exit history unavailable.\n")
+            }
+        } else {
+            sb.append("Exit history needs Android 11 or newer.\n")
+        }
+        val last = CrashLog.last(this)
+        sb.append("\nLast error caught:\n").append(if (last.isEmpty()) "none" else last)
+        return sb.toString()
+    }
+
+    private fun reasonName(r: Int): String = if (Build.VERSION.SDK_INT < 30) "unknown" else when (r) {
+        ApplicationExitInfo.REASON_CRASH, ApplicationExitInfo.REASON_CRASH_NATIVE -> "Crash"
+        ApplicationExitInfo.REASON_ANR -> "Not responding (ANR)"
+        ApplicationExitInfo.REASON_LOW_MEMORY -> "Killed: low memory"
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "Killed: excessive resource use"
+        ApplicationExitInfo.REASON_USER_REQUESTED -> "Stopped by user (force stop / swipe)"
+        ApplicationExitInfo.REASON_USER_STOPPED -> "Stopped by user"
+        ApplicationExitInfo.REASON_SIGNALED -> "Killed by system / battery manager"
+        ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "Dependency died"
+        ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "Permission changed"
+        ApplicationExitInfo.REASON_OTHER -> "Other"
+        ApplicationExitInfo.REASON_EXIT_SELF -> "Exited itself"
+        else -> "Reason $r"
     }
 
     private fun refreshSwatches(fg: Int, muted: Int) {
