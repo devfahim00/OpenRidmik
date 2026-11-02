@@ -3,6 +3,7 @@ package com.devfahim00.openridmik
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
@@ -31,10 +32,23 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private enum class Mode { ALPHA, SYM1, SYM2, NUM }
 
     private lateinit var avro: AvroEngine
-    private lateinit var dict: Suggester
+    private val dictBn: Suggester by lazy {
+        Suggester(
+            assets.open("words_bn.txt").bufferedReader().use { it.readText() },
+            assets.open("next_bn.txt").bufferedReader().use { it.readText() },
+        )
+    }
+    private val dictEn: Suggester by lazy {
+        Suggester(
+            assets.open("words_en.txt").bufferedReader().use { it.readText() },
+            assets.open("next_en.txt").bufferedReader().use { it.readText() },
+        )
+    }
     private lateinit var root: LinearLayout
     private lateinit var toolbar: LinearLayout
     private lateinit var suggestionBar: LinearLayout
+    private lateinit var toggleBtn: TextView
+    private var toolbarOpen = false
     private lateinit var kbView: KeyboardView
     private lateinit var theme: KbTheme
     private val suggestionViews = ArrayList<TextView>()
@@ -65,10 +79,13 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipboard?.addPrimaryClipChangedListener(clipListener)
         avro = AvroEngine(assets.open("avro_rules.txt").bufferedReader().use { it.readText() })
-        dict = Suggester(assets.open("words_bn.txt").bufferedReader().use { it.readText() })
         theme = Themes.current(this)
-        // Warm up the emoji catalogue (glyph checks) off the main thread.
+        // Warm up the emoji catalogue and the word lists off the main thread.
         Thread { EmojiData.groups(applicationContext) }.start()
+        Thread {
+            dictBn.top(1)
+            dictEn.top(1)
+        }.start()
     }
 
     override fun onDestroy() {
@@ -135,9 +152,22 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             suggestionViews.add(tv)
             suggestionBar.addView(tv, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         }
+        // small button on the left swaps between the suggestions and the toolbar icons
+        toggleBtn = TextView(this).apply {
+            gravity = Gravity.CENTER
+            textSize = 20f
+            setTextColor(theme.hint)
+            setOnClickListener {
+                toolbarOpen = !toolbarOpen
+                updateBarVisibility()
+            }
+        }
+        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        strip.addView(toggleBtn, lp(dp(40), LinearLayout.LayoutParams.MATCH_PARENT))
+        strip.addView(toolbar, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        strip.addView(suggestionBar, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         kbView = KeyboardView(this).also { it.listener = this }
-        root.addView(toolbar, lp(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
-        root.addView(suggestionBar, lp(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
+        root.addView(strip, lp(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)))
         root.addView(kbView, lp(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         rebuild()
         return root
@@ -149,6 +179,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         Updater.check(this, force = false) { refreshUpdateBadge() }
         raw.clear()
         clearBar()
+        toolbarOpen = false
         hidePanel()
         val cls = info.inputType and InputType.TYPE_MASK_CLASS
         val variation = info.inputType and InputType.TYPE_MASK_VARIATION
@@ -184,6 +215,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         applyTheme()
         updateAutoCap()
         rebuild()
+        scheduleRefresh()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -201,6 +233,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             raw.clear()
             clearBar()
         }
+        if (raw.isEmpty()) scheduleRefresh()
     }
 
     // ---- theme ----
@@ -211,7 +244,34 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         root.setBackgroundColor(theme.bg)
         for (tv in suggestionViews) tv.setTextColor(theme.text)
         for (b in toolbarButtons) tint(b)
+        toggleBtn.setTextColor(theme.hint)
         kbView.refreshTheme()
+        syncNavBar()
+    }
+
+    /** Paints the system navigation bar under the keyboard with the keyboard's own background colour. */
+    private fun syncNavBar() {
+        val w = window?.window ?: return
+        try {
+            w.navigationBarColor = theme.bg
+            if (Build.VERSION.SDK_INT >= 28) w.navigationBarDividerColor = theme.bg
+            val lum = (0.299f * Color.red(theme.bg) + 0.587f * Color.green(theme.bg) + 0.114f * Color.blue(theme.bg)) / 255f
+            if (Build.VERSION.SDK_INT >= 26) {
+                @Suppress("DEPRECATION")
+                val flags = w.decorView.systemUiVisibility
+                @Suppress("DEPRECATION")
+                w.decorView.systemUiVisibility =
+                    if (lum > 0.5f) flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+                    else flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
+            }
+        } catch (e: Exception) {
+            // some devices restrict the IME window; the keyboard still works without the tint
+        }
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        if (::root.isInitialized) syncNavBar()
     }
 
     private fun tint(v: View) {
@@ -265,11 +325,14 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     /** The strip above the keys shows the toolbar normally and word suggestions while composing (Avro). */
     private fun updateBarVisibility() {
-        if (!::toolbar.isInitialized) return
+        if (!::toolbar.isInitialized || !::toggleBtn.isInitialized) return
         val noPanel = panel == null
-        val show = barHasItems && mode == Mode.ALPHA && !passwordField && Prefs.get(this, "suggestions")
-        suggestionBar.visibility = if (noPanel && show) View.VISIBLE else View.GONE
-        toolbar.visibility = if (noPanel && !show) View.VISIBLE else View.GONE
+        val can = barHasItems && mode == Mode.ALPHA && !passwordField && !forceLatin && Prefs.get(this, "suggestions")
+        val showSug = can && !toolbarOpen
+        suggestionBar.visibility = if (noPanel && showSug) View.VISIBLE else View.GONE
+        toolbar.visibility = if (noPanel && !showSug) View.VISIBLE else View.GONE
+        toggleBtn.visibility = if (noPanel && can) View.VISIBLE else View.GONE
+        toggleBtn.text = if (toolbarOpen) "‹" else "⋯"
     }
 
     private fun showNumpad() {
@@ -285,6 +348,10 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     override fun onKey(key: Key) {
         val ic = currentInputConnection ?: return
+        if (toolbarOpen) {
+            toolbarOpen = false
+            updateBarVisibility()
+        }
         if (Prefs.get(this, "sound")) {
             audio?.playSoundEffect(
                 if (key.code == Codes.DELETE) AudioManager.FX_KEYPRESS_DELETE else AudioManager.FX_KEYPRESS_STANDARD,
@@ -305,7 +372,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                 ic.commitText(" ", 1)
                 learnLastWord(ic)
                 afterChar()
-                updateNextWords(ic)
+                refreshBar(ic)
             }
             Codes.SYMBOLS, Codes.SYM1 -> {
                 finishComposing(ic)
@@ -324,6 +391,11 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             Codes.LANG -> toggleLang()
             else -> handleChar(ic, key)
         }
+    }
+
+    override fun onSpaceSwipe(dir: Int) {
+        if (mode != Mode.ALPHA) return
+        setLang((currentLang() + dir + 3) % 3, announce = false)
     }
 
     override fun onLongPress(key: Key): Boolean {
@@ -437,7 +509,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         } else {
             finishComposing(ic)
             ic.commitText(avroSymbol(ic, t), 1)
-            clearBar()
+            refreshBar(ic)
         }
         afterChar()
     }
@@ -474,6 +546,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             val sel = ic.getSelectedText(0)
             if (!sel.isNullOrEmpty()) ic.commitText("", 1) else sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
             clearBar()
+            scheduleRefresh()
         }
         updateAutoCap()
     }
@@ -501,31 +574,42 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         }
     }
 
+    /** 0 = English, 1 = Avro (phonetic), 2 = Probhat. */
+    private fun currentLang(): Int = if (!bangla) 0 else if (probhat) 2 else 1
+
     /** Globe key: English -> Avro -> Probhat -> English. */
-    private fun toggleLang() {
+    private fun toggleLang() = setLang((currentLang() + 1) % 3, announce = true)
+
+    private fun setLang(idx: Int, announce: Boolean) {
         currentInputConnection?.let { finishComposing(it) }
-        when {
-            !bangla -> {
+        when (idx) {
+            0 -> bangla = false
+            1 -> {
                 bangla = true
                 probhat = false
             }
-            !probhat -> probhat = true
-            else -> bangla = false
+            else -> {
+                bangla = true
+                probhat = true
+            }
         }
         if (bangla) Prefs.setLayout(this, if (probhat) "probhat" else "avro")
         if (!forceLatin) Prefs.setBangla(this, bangla)
         shift = 0
         rebuild()
         updateAutoCap()
-        Toast.makeText(
-            this,
-            when {
-                !bangla -> "English"
-                probhat -> "Probhat"
-                else -> "Avro (phonetic)"
-            },
-            Toast.LENGTH_SHORT,
-        ).show()
+        currentInputConnection?.let { refreshBar(it) }
+        if (announce) {
+            Toast.makeText(
+                this,
+                when {
+                    !bangla -> "English"
+                    probhat -> "Probhat"
+                    else -> "Avro (phonetic)"
+                },
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
     }
 
     private fun performEnter(ic: InputConnection) {
@@ -553,7 +637,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         ic.setComposingText(bn, 1)
         val sug = if (Prefs.get(this, "suggestions") && !passwordField) {
             val learned = UserDict.suggest(this, bn, prevWord(ic, composing = true), 2)
-            (learned + dict.suggest(bn, 4)).distinct().take(2)
+            (learned + dictBn.suggest(bn, 6)).distinct().take(2)
         } else emptyList()
         setBar(sug.getOrNull(0), bn, sug.getOrNull(1))
     }
@@ -568,11 +652,21 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private fun pickSuggestion(word: String) {
         val ic = currentInputConnection ?: return
         if (word.isEmpty()) return
-        ic.commitText("$word ", 1)
-        raw.clear()
+        if (raw.isNotEmpty()) {
+            // Avro: the composing text is replaced by the chosen word
+            ic.commitText("$word ", 1)
+            raw.clear()
+        } else {
+            // English / Probhat: replace the partly typed word before the cursor
+            val before = ic.getTextBeforeCursor(80, 0)?.toString() ?: ""
+            val tw = trailingWord(before)
+            if (tw.isNotEmpty()) ic.deleteSurroundingText(tw.length, 0)
+            ic.commitText("$word ", 1)
+        }
         clearBar()
         learnLastWord(ic)
-        updateNextWords(ic)
+        afterChar()
+        refreshBar(ic)
     }
 
     private fun setBar(a: String?, b: String?, c: String?) {
@@ -588,7 +682,11 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     // ---- learning + next-word prediction ----
 
-    private val wordRe = Regex("[\\p{L}\\p{M}]+")
+    private val wordRe = Regex("[\\p{L}\\p{M}]+(?:'[\\p{L}]+)?")
+    private val tailRe = Regex("[\\p{L}\\p{M}']+$")
+
+    /** The partly typed word right before the cursor ("" when the cursor follows a space or symbol). */
+    private fun trailingWord(before: String): String = tailRe.find(before)?.value?.trimStart('\'') ?: ""
 
     /** Word preceding the one being typed (composing) or the last finished word (after a space). */
     private fun prevWord(ic: InputConnection, composing: Boolean): String? {
@@ -601,7 +699,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
 
     /** Called right after "word " has been committed: learns the word and its pair with the previous one. */
     private fun learnLastWord(ic: InputConnection) {
-        if (passwordField) return
+        if (passwordField || forceLatin) return
         val t = ic.getTextBeforeCursor(80, 0)?.toString() ?: return
         if (!t.endsWith(" ")) return
         val ws = wordRe.findAll(t).map { it.value }.toList()
@@ -609,14 +707,74 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         UserDict.learn(this, ws.getOrNull(ws.size - 2), w)
     }
 
-    private fun updateNextWords(ic: InputConnection) {
-        if (!Prefs.get(this, "suggestions") || passwordField || mode != Mode.ALPHA || raw.isNotEmpty()) {
+    private val refreshRun = Runnable { currentInputConnection?.let { refreshBar(it) } }
+
+    private fun scheduleRefresh() {
+        ui.removeCallbacks(refreshRun)
+        ui.postDelayed(refreshRun, 60)
+    }
+
+    private fun isScriptBn(w: String) = w.isNotEmpty() && w[0].code in 0x0980..0x09FF
+
+    private fun dictFor(w: String): Suggester = if (isScriptBn(w)) dictBn else dictEn
+
+    /** Matches the typed word's capitalisation (Hel -> Hello, HEL -> HELLO). */
+    private fun cased(sug: String, typed: String): String = when {
+        typed.length > 1 && typed.all { !it.isLetter() || it.isUpperCase() } -> sug.uppercase()
+        typed.isNotEmpty() && typed[0].isUpperCase() -> sug.replaceFirstChar { it.uppercase() }
+        else -> sug
+    }
+
+    /** "i" and "i'm" are always capitalised in English. */
+    private fun display(w: String, sentenceStart: Boolean): String = when {
+        w == "i" || w.startsWith("i'") -> w.replaceFirstChar { it.uppercase() }
+        sentenceStart && w.isNotEmpty() && w[0] in 'a'..'z' -> w.replaceFirstChar { it.uppercase() }
+        else -> w
+    }
+
+    /**
+     * One place that decides what the strip shows when nothing is being composed (English, Probhat, and Avro
+     * between words): completions for the word before the cursor, or next-word predictions after a space.
+     */
+    private fun refreshBar(ic: InputConnection) {
+        if (!Prefs.get(this, "suggestions") || passwordField || forceLatin || mode != Mode.ALPHA || panel != null) {
             clearBar()
             return
         }
-        val prev = prevWord(ic, composing = false)
-        val n = if (prev == null) emptyList() else UserDict.next(this, prev, 3)
-        setBar(n.getOrNull(0), n.getOrNull(1), n.getOrNull(2))
+        if (raw.isNotEmpty()) return
+        val before = ic.getTextBeforeCursor(80, 0)?.toString() ?: ""
+        val tw = trailingWord(before)
+        when {
+            tw.isNotEmpty() -> wordSuggestions(before, tw)
+            before.isEmpty() || before.last().isWhitespace() -> nextWordSuggestions(before)
+            else -> clearBar()
+        }
+    }
+
+    private fun wordSuggestions(before: String, tw: String) {
+        val head = before.substring(0, before.length - tw.length)
+        val prev = wordRe.findAll(head).map { it.value }.lastOrNull()
+        val key = UserDict.norm(tw)
+        val learned = UserDict.suggest(this, key, prev, 3)
+        val seed = dictFor(tw).suggest(key, 6)
+        val list = (learned + seed).distinct().filter { it != key }.take(2).map { cased(it, tw) }
+        setBar(list.getOrNull(0), tw, list.getOrNull(1))
+    }
+
+    private fun nextWordSuggestions(before: String) {
+        val trimmed = before.trimEnd()
+        val sentenceStart = trimmed.isEmpty() || before.endsWith("\n") || trimmed.last() in ".!?\u0964"
+        val prev = if (sentenceStart) null else wordRe.findAll(trimmed).map { it.value }.lastOrNull()
+        val d = if (prev != null) dictFor(prev) else if (bangla) dictBn else dictEn
+        val key = prev?.let { UserDict.norm(it) }
+        val learned = if (key != null) UserDict.next(this, key, 3) else emptyList()
+        val seed = when {
+            key != null -> d.next(key, 6).ifEmpty { d.top(3) }
+            else -> d.starters(6)
+        }
+        val latin = d === dictEn
+        val list = (learned + seed).distinct().take(3).map { if (latin) display(it, sentenceStart) else it }
+        setBar(list.getOrNull(0), list.getOrNull(1), list.getOrNull(2))
     }
 
     private fun clearBar() = setBar(null, null, null)
