@@ -48,6 +48,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private lateinit var suggestionBar: LinearLayout
     private lateinit var toggleBtn: TextView
     private var toolbarOpen = false
+    /** Suggestions stay hidden (toolbar shows) until the user types something in the current field. */
+    private var typedSinceStart = false
     private lateinit var kbView: KeyboardView
     private lateinit var theme: KbTheme
     private val suggestionViews = ArrayList<TextView>()
@@ -179,6 +181,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         raw.clear()
         clearBar()
         toolbarOpen = false
+        typedSinceStart = false
         hidePanel()
         val cls = info.inputType and InputType.TYPE_MASK_CLASS
         val variation = info.inputType and InputType.TYPE_MASK_VARIATION
@@ -333,8 +336,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private fun updateBarVisibility() {
         if (!::toolbar.isInitialized || !::toggleBtn.isInitialized) return
         val noPanel = panel == null
-        // the suggestion strip is the default view of the bar, even before anything has been typed
-        val can = mode == Mode.ALPHA && !passwordField && !forceLatin && Prefs.get(this, "suggestions")
+        // the toolbar is the default; suggestions only replace it once there is something to suggest
+        val can = barHasItems && mode == Mode.ALPHA && !passwordField && !forceLatin && Prefs.get(this, "suggestions")
         val showSug = can && !toolbarOpen
         suggestionBar.visibility = if (noPanel && showSug) View.VISIBLE else View.GONE
         toolbar.visibility = if (noPanel && !showSug) View.VISIBLE else View.GONE
@@ -359,6 +362,9 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             toolbarOpen = false
             updateBarVisibility()
         }
+        if (key.code != Codes.SHIFT && key.code != Codes.SYMBOLS && key.code != Codes.SYM1 &&
+            key.code != Codes.SYM2 && key.code != Codes.ALPHA && key.code != Codes.EMOJI
+        ) typedSinceStart = true
         if (Prefs.get(this, "sound")) {
             audio?.playSoundEffect(
                 if (key.code == Codes.DELETE) AudioManager.FX_KEYPRESS_DELETE else AudioManager.FX_KEYPRESS_STANDARD,
@@ -404,8 +410,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         val on = Prefs.enabledLangs(this)
         if (on.size < 2) return
         val i = on.indexOf(currentLang())
-        // from a layout that is switched off, jump to the first enabled one
-        val next = if (i < 0) on.first() else on[(i + dir + on.size) % on.size]
+        // either swipe direction moves forward: English -> Avro -> Probhat -> English
+        val next = if (i < 0) on.first() else on[(i + 1) % on.size]
         setLang(next)
     }
 
@@ -740,11 +746,16 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
             return
         }
         if (raw.isNotEmpty()) return
+        if (!typedSinceStart) {
+            clearBar()
+            return
+        }
         val before = ic.getTextBeforeCursor(80, 0)?.toString() ?: ""
         val tw = trailingWord(before)
         when {
+            before.isEmpty() -> clearBar()
             tw.isNotEmpty() -> wordSuggestions(before, tw)
-            before.isEmpty() || before.last().isWhitespace() -> nextWordSuggestions(before)
+            before.last().isWhitespace() -> nextWordSuggestions(before)
             else -> clearBar()
         }
     }
