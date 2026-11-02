@@ -15,6 +15,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -72,6 +73,15 @@ class SettingsActivity : Activity() {
 
     private lateinit var swatchRow: LinearLayout
     private val heightBars = ArrayList<SeekBar>()
+    private var batteryStatus: TextView? = null
+
+    private fun isUnrestricted(): Boolean =
+        (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+
+    override fun onResume() {
+        super.onResume()
+        batteryStatus?.text = if (isUnrestricted()) "Unrestricted ✓" else "Restricted"
+    }
     private val d by lazy { resources.displayMetrics.density }
 
     private fun dp(v: Int) = (v * d).toInt()
@@ -407,12 +417,38 @@ class SettingsActivity : Activity() {
         // ---- keyboard keeps switching? ----
         section("Keyboard keeps switching?")
         val diag = card()
-        row(diag, true, "Allow background running", chevron()) {
-            // battery optimisation is the most common reason Android kills the keyboard and falls back to another one
-            try {
-                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-            } catch (e: Exception) {
-                startActivity(Intent(Settings.ACTION_SETTINGS))
+        batteryStatus = text("", 14f, muted)
+        row(diag, true, "Disable battery optimization", batteryStatus) {
+            if (isUnrestricted()) {
+                Toast.makeText(this, "Already unrestricted", Toast.LENGTH_SHORT).show()
+            } else {
+                try {
+                    // system dialog: one tap on "Allow"
+                    startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")),
+                    )
+                } catch (e: Exception) {
+                    try {
+                        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    } catch (e2: Exception) {
+                        startActivity(Intent(Settings.ACTION_SETTINGS))
+                    }
+                }
+            }
+        }
+        row(diag, false, "App battery / autostart settings (Xiaomi etc.)", chevron()) {
+            // Xiaomi/HyperOS keeps its own autostart + "No restrictions" switch; fall back to the app info page
+            val tries = listOf(
+                Intent().setClassName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+                Intent("miui.intent.action.POWER_HIDE_MODE_APP_LIST").setPackage("com.miui.powerkeeper"),
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+            )
+            for (i in tries) {
+                try {
+                    startActivity(i)
+                    break
+                } catch (e: Exception) {
+                }
             }
         }
         row(diag, false, "Why did the keyboard stop?", chevron()) {
