@@ -19,7 +19,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
-import android.view.inputmethod.InputMethodManager
 import android.widget.GridLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -198,6 +197,11 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         )
         bangla = if (forceLatin) false else Prefs.isBangla(this)
         probhat = Prefs.layout(this) == "probhat"
+        if (!forceLatin) {
+            // a layout the user switched off in settings is never left active
+            val on = Prefs.enabledLangs(this)
+            if (currentLang() !in on) applyLangFlags(on.first())
+        }
         mode = if (cls == InputType.TYPE_CLASS_NUMBER || cls == InputType.TYPE_CLASS_PHONE ||
             cls == InputType.TYPE_CLASS_DATETIME
         ) Mode.SYM1 else Mode.ALPHA
@@ -314,6 +318,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         kbView.haptic = Prefs.get(this, "haptic")
         kbView.enterLabel = enterLabel
         kbView.shiftState = shift
+        kbView.spaceArrows = Prefs.enabledLangs(this).size > 1
         kbView.spaceLabel = when {
             !bangla -> "English"
             probhat -> "বাংলা · প্রভাত"
@@ -388,14 +393,18 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                 rebuild()
             }
             Codes.EMOJI -> showEmoji()
-            Codes.LANG -> toggleLang()
             else -> handleChar(ic, key)
         }
     }
 
     override fun onSpaceSwipe(dir: Int) {
         if (mode != Mode.ALPHA) return
-        setLang((currentLang() + dir + 3) % 3, announce = false)
+        val on = Prefs.enabledLangs(this)
+        if (on.size < 2) return
+        val i = on.indexOf(currentLang())
+        // from a layout that is switched off, jump to the first enabled one
+        val next = if (i < 0) on.first() else on[(i + dir + on.size) % on.size]
+        setLang(next)
     }
 
     override fun onLongPress(key: Key): Boolean {
@@ -403,10 +412,6 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         return when {
             key.action != 0 -> {
                 clipAction(ic, key.action)
-                true
-            }
-            key.code == Codes.LANG -> {
-                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
                 true
             }
             key.code == ','.code && mode == Mode.ALPHA -> {
@@ -577,11 +582,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     /** 0 = English, 1 = Avro (phonetic), 2 = Probhat. */
     private fun currentLang(): Int = if (!bangla) 0 else if (probhat) 2 else 1
 
-    /** Globe key: English -> Avro -> Probhat -> English. */
-    private fun toggleLang() = setLang((currentLang() + 1) % 3, announce = true)
-
-    private fun setLang(idx: Int, announce: Boolean) {
-        currentInputConnection?.let { finishComposing(it) }
+    private fun applyLangFlags(idx: Int) {
         when (idx) {
             0 -> bangla = false
             1 -> {
@@ -593,23 +594,18 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
                 probhat = true
             }
         }
+    }
+
+    /** Switches layout (space-bar swipe); the space bar label and popup show which one is active. */
+    private fun setLang(idx: Int) {
+        currentInputConnection?.let { finishComposing(it) }
+        applyLangFlags(idx)
         if (bangla) Prefs.setLayout(this, if (probhat) "probhat" else "avro")
         if (!forceLatin) Prefs.setBangla(this, bangla)
         shift = 0
         rebuild()
         updateAutoCap()
         currentInputConnection?.let { refreshBar(it) }
-        if (announce) {
-            Toast.makeText(
-                this,
-                when {
-                    !bangla -> "English"
-                    probhat -> "Probhat"
-                    else -> "Avro (phonetic)"
-                },
-                Toast.LENGTH_SHORT,
-            ).show()
-        }
     }
 
     private fun performEnter(ic: InputConnection) {

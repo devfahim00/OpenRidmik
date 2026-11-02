@@ -19,7 +19,6 @@ object Codes {
     const val ENTER = -4
     const val DELETE = -5
     const val EMOJI = -6
-    const val LANG = -7
     const val SYM2 = -8
     const val SYM1 = -9
     const val CUT = -10
@@ -66,6 +65,12 @@ class KeyboardView(context: Context) : View(context) {
             invalidate()
         }
     var spaceLabel = ""
+        set(v) {
+            field = v
+            invalidate()
+        }
+    /** Show the small ◂ ▸ arrows on the space bar (only useful when there are 2+ layouts to switch between). */
+    var spaceArrows = true
         set(v) {
             field = v
             invalidate()
@@ -128,7 +133,7 @@ class KeyboardView(context: Context) : View(context) {
         var fired = false
         /** True once a space-bar press has turned into a language-switching swipe. */
         var swiping = false
-        var anchorX = startX
+        var swipeFired = false
         val longRun = Runnable {
             if (listener?.onLongPress(key) == true) {
                 longDone = true
@@ -308,11 +313,6 @@ class KeyboardView(context: Context) : View(context) {
                     canvas.drawLine(cx - s, cy + s * 0.2f, cx - s * 0.35f, cy + s * 0.85f, stroke)
                 }
             }
-            Codes.LANG -> {
-                canvas.drawCircle(cx, cy, s, stroke)
-                canvas.drawOval(RectF(cx - s * 0.45f, cy - s, cx + s * 0.45f, cy + s), stroke)
-                canvas.drawLine(cx - s, cy, cx + s, cy, stroke)
-            }
             Codes.EMOJI -> {
                 canvas.drawCircle(cx, cy, s, stroke)
                 canvas.drawCircle(cx - s * 0.35f, cy - s * 0.25f, s * 0.12f, fill)
@@ -329,7 +329,7 @@ class KeyboardView(context: Context) : View(context) {
                 val half = text.measureText(spaceLabel) / 2f + dp(12f)
                 val ah = dp(4f)
                 fill.color = cHint
-                if (half + dp(14f) < box.width() / 2f) {
+                if (spaceArrows && half + dp(14f) < box.width() / 2f) {
                     val lx = cx - half
                     canvas.drawPath(Path().apply {
                         moveTo(lx, cy); lineTo(lx + ah, cy - ah); lineTo(lx + ah, cy + ah); close()
@@ -422,19 +422,15 @@ class KeyboardView(context: Context) : View(context) {
             if (!p.swiping && Math.abs(x - p.startX) > dp(22f)) {
                 p.swiping = true
                 handler.removeCallbacks(p.longRun)
-                p.anchorX = x
                 if (haptic) performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 invalidate()
             }
-            if (p.swiping) {
-                val step = dp(46f)
-                while (Math.abs(x - p.anchorX) >= step) {
-                    val dir = if (x > p.anchorX) 1 else -1
-                    p.anchorX += dir * step
-                    if (haptic) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    listener?.onSpaceSwipe(dir)
-                }
-                return
+            // one swipe = one layout change, however far the finger travels
+            if (p.swiping && !p.swipeFired && Math.abs(x - p.startX) > dp(40f)) {
+                p.swipeFired = true
+                if (haptic) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                listener?.onSpaceSwipe(if (x > p.startX) 1 else -1)
+                invalidate()
             }
             return
         }

@@ -57,9 +57,7 @@ Avro phonetic · Probhat · Emoji · Clipboard manager · Number pad · Themes
 
 | Gesture | What it does |
 |---|---|
-| **Tap 🌐** | Cycle **English → Avro → Probhat** |
-| **Hold 🌐** | Open the system keyboard picker |
-| **Hold space and slide left / right** | Switch **English ⇄ Avro ⇄ Probhat**; the popup shows the active layout |
+| **Hold space, slide left / right** | Switch layout (**English · Avro · Probhat**), one step per swipe. Turn layouts on or off in settings (English and Avro are on by default) |
 | **Hold a letter** | Type its alternate (for example a Bangla letter, or the English digit on the Bangla number row). The popup shows the alternate while you hold |
 | **Hold `X` / `C` / `V`** | Cut / copy / paste (with no selection, cut and copy act on the whole field) |
 | **Hold `,`** | Open the emoji panel |
