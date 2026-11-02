@@ -97,9 +97,8 @@ object Layouts {
         return if (alpha) {
             listOf(
                 first,
-                special("", Codes.LANG),
                 comma,
-                Key("", Codes.SPACE, " ", weight = 4f),
+                Key("", Codes.SPACE, " ", weight = 5f),
                 period,
                 enter,
             )

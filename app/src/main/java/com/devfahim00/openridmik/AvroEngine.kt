@@ -119,14 +119,42 @@ class AvroEngine(rulesText: String) {
     }
 }
 
-class Suggester(text: String) {
+/**
+ * Bundled dictionary for one language: words ordered by frequency (most common first) plus a small table of
+ * common word pairs and sentence starters, so suggestions work from the very first keystroke after install.
+ */
+class Suggester(text: String, seed: String = "") {
     private val words = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    private val follow = HashMap<String, List<String>>()
+    private var starters: List<String> = emptyList()
 
+    init {
+        for (line in seed.lines()) {
+            val parts = line.trim().split(' ').filter { it.isNotEmpty() }
+            if (parts.size < 2) continue
+            if (parts[0] == "^") starters = parts.drop(1) else follow[parts[0]] = parts.drop(1)
+        }
+    }
+
+    /** Words that start with [prefix], most frequent first. */
     fun suggest(prefix: String, max: Int): List<String> {
         if (prefix.isEmpty()) return emptyList()
-        return words.asSequence()
-            .filter { it.startsWith(prefix) && it != prefix }
-            .take(max)
-            .toList()
+        val out = ArrayList<String>(max)
+        for (w in words) {
+            if (w.length > prefix.length && w.startsWith(prefix)) {
+                out.add(w)
+                if (out.size >= max) break
+            }
+        }
+        return out
     }
+
+    /** Common words that follow [prev]. */
+    fun next(prev: String, max: Int): List<String> = follow[prev]?.take(max) ?: emptyList()
+
+    /** Typical first words of a sentence. */
+    fun starters(max: Int): List<String> = starters.take(max)
+
+    /** The most common words overall (used when nothing better is known). */
+    fun top(max: Int): List<String> = words.take(max)
 }

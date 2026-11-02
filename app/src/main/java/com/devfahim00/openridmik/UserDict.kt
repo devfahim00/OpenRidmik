@@ -18,6 +18,9 @@ object UserDict {
     private var loaded = false
     private var dirty = 0
 
+    /** Latin words are stored lower-case so "The" and "the" count together. */
+    fun norm(w: String): String = if (w.isNotEmpty() && (w[0] in 'a'..'z' || w[0] in 'A'..'Z')) w.lowercase() else w
+
     private fun sp(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
     @Synchronized
@@ -53,8 +56,10 @@ object UserDict {
     }
 
     @Synchronized
-    fun learn(c: Context, prev: String?, word: String) {
+    fun learn(c: Context, prev0: String?, word0: String) {
         ensure(c)
+        val word = norm(word0)
+        val prev = prev0?.let { norm(it) }
         if (word.length < 2) return
         words[word] = (words[word] ?: 0) + 1
         if (!prev.isNullOrEmpty()) {
@@ -68,9 +73,11 @@ object UserDict {
 
     /** Words the user has typed that start with [prefix], most relevant first (prev-word pairs boosted). */
     @Synchronized
-    fun suggest(c: Context, prefix: String, prev: String?, max: Int): List<String> {
+    fun suggest(c: Context, prefix0: String, prev0: String?, max: Int): List<String> {
         ensure(c)
-        if (prefix.isEmpty()) return emptyList()
+        if (prefix0.isEmpty()) return emptyList()
+        val prefix = norm(prefix0)
+        val prev = prev0?.let { norm(it) }
         return words.entries.asSequence()
             .filter { it.key.startsWith(prefix) && it.key != prefix }
             .sortedByDescending { it.value + 5 * (if (prev.isNullOrEmpty()) 0 else pairs["$prev\u0001${it.key}"] ?: 0) }
@@ -81,9 +88,10 @@ object UserDict {
 
     /** Most likely words to follow [prev]. */
     @Synchronized
-    fun next(c: Context, prev: String, max: Int): List<String> {
+    fun next(c: Context, prev0: String, max: Int): List<String> {
         ensure(c)
-        if (prev.isEmpty()) return emptyList()
+        if (prev0.isEmpty()) return emptyList()
+        val prev = norm(prev0)
         val pre = "$prev\u0001"
         return pairs.entries.asSequence()
             .filter { it.key.startsWith(pre) }

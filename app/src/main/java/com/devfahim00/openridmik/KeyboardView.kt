@@ -19,7 +19,6 @@ object Codes {
     const val ENTER = -4
     const val DELETE = -5
     const val EMOJI = -6
-    const val LANG = -7
     const val SYM2 = -8
     const val SYM1 = -9
     const val CUT = -10
@@ -48,6 +47,9 @@ class KeyboardView(context: Context) : View(context) {
     interface Listener {
         fun onKey(key: Key)
         fun onLongPress(key: Key): Boolean
+
+        /** Space bar dragged sideways: +1 for right, -1 for left, once per step of travel. */
+        fun onSpaceSwipe(dir: Int) {}
     }
 
     var listener: Listener? = null
@@ -63,6 +65,12 @@ class KeyboardView(context: Context) : View(context) {
             invalidate()
         }
     var spaceLabel = ""
+        set(v) {
+            field = v
+            invalidate()
+        }
+    /** Show the small ◂ ▸ arrows on the space bar (only useful when there are 2+ layouts to switch between). */
+    var spaceArrows = true
         set(v) {
             field = v
             invalidate()
@@ -120,9 +128,12 @@ class KeyboardView(context: Context) : View(context) {
     private fun dp(v: Float) = v * resources.displayMetrics.density
     private fun sp(v: Float) = v * resources.displayMetrics.scaledDensity
 
-    private inner class Press(var key: Key, var rect: RectF) {
+    private inner class Press(var key: Key, var rect: RectF, val startX: Float = 0f) {
         var longDone = false
         var fired = false
+        /** True once a space-bar press has turned into a language-switching swipe. */
+        var swiping = false
+        var swipeFired = false
         val longRun = Runnable {
             if (listener?.onLongPress(key) == true) {
                 longDone = true
@@ -165,6 +176,16 @@ class KeyboardView(context: Context) : View(context) {
                 val rc = RectF(x, padTop + r * rowH, x + w, padTop + (r + 1) * rowH)
                 x += w
                 rc
+            }
+        }
+        // the layout can change under a finger (language swipe): keep an active space press on the new space key
+        for (p in presses.values) {
+            if (p.key.code != Codes.SPACE) continue
+            for (r in rows.indices) for (i in rows[r].indices) {
+                if (rows[r][i].code == Codes.SPACE) {
+                    p.key = rows[r][i]
+                    p.rect = rects[r][i]
+                }
             }
         }
     }
@@ -218,7 +239,26 @@ class KeyboardView(context: Context) : View(context) {
                 drawKeyContent(canvas, k, box, fg)
             }
         }
-        for (p in presses.values) drawPreview(canvas, p)
+        for (p in presses.values) {
+            if (p.swiping) drawSwipePreview(canvas, p) else drawPreview(canvas, p)
+        }
+    }
+
+    /** While swiping the space bar, show the language that is now active in a big popup above it. */
+    private fun drawSwipePreview(canvas: Canvas, p: Press) {
+        val rc = p.rect
+        val w = minOf(width - dp(16f), maxOf(rc.width() * 0.8f, dp(170f)))
+        val h = rowH * 1.1f
+        val left = (rc.centerX() - w / 2f).coerceIn(dp(8f), width - w - dp(8f))
+        val bottom = rc.top - dp(2f)
+        val top = maxOf(bottom - h, dp(1f))
+        val box = RectF(left, top, left + w, top + h)
+        fill.color = cPreview
+        canvas.drawRoundRect(box, dp(12f), dp(12f), fill)
+        stroke.color = cHint
+        stroke.strokeWidth = dp(1f)
+        canvas.drawRoundRect(box, dp(12f), dp(12f), stroke)
+        drawText(canvas, spaceLabel, box.centerX(), box.centerY(), sp(20f), cText)
     }
 
     private fun drawKeyContent(canvas: Canvas, k: Key, box: RectF, fg: Int) {
@@ -273,11 +313,6 @@ class KeyboardView(context: Context) : View(context) {
                     canvas.drawLine(cx - s, cy + s * 0.2f, cx - s * 0.35f, cy + s * 0.85f, stroke)
                 }
             }
-            Codes.LANG -> {
-                canvas.drawCircle(cx, cy, s, stroke)
-                canvas.drawOval(RectF(cx - s * 0.45f, cy - s, cx + s * 0.45f, cy + s), stroke)
-                canvas.drawLine(cx - s, cy, cx + s, cy, stroke)
-            }
             Codes.EMOJI -> {
                 canvas.drawCircle(cx, cy, s, stroke)
                 canvas.drawCircle(cx - s * 0.35f, cy - s * 0.25f, s * 0.12f, fill)
@@ -287,7 +322,24 @@ class KeyboardView(context: Context) : View(context) {
                     20f, 140f, false, stroke,
                 )
             }
-            Codes.SPACE -> drawText(canvas, spaceLabel, cx, cy, sp(13f), cHint)
+            Codes.SPACE -> {
+                drawText(canvas, spaceLabel, cx, cy, sp(13f), cHint)
+                // small arrows hint that the space bar can be dragged left / right to switch language
+                text.textSize = sp(13f)
+                val half = text.measureText(spaceLabel) / 2f + dp(12f)
+                val ah = dp(4f)
+                fill.color = cHint
+                if (spaceArrows && half + dp(14f) < box.width() / 2f) {
+                    val lx = cx - half
+                    canvas.drawPath(Path().apply {
+                        moveTo(lx, cy); lineTo(lx + ah, cy - ah); lineTo(lx + ah, cy + ah); close()
+                    }, fill)
+                    val rx = cx + half
+                    canvas.drawPath(Path().apply {
+                        moveTo(rx, cy); lineTo(rx - ah, cy - ah); lineTo(rx - ah, cy + ah); close()
+                    }, fill)
+                }
+            }
             else -> {
                 val big = k.label.length <= 2
                 // keys with a corner hint: shrink the main label a little and drop it so the two never touch
@@ -351,7 +403,7 @@ class KeyboardView(context: Context) : View(context) {
 
     private fun down(id: Int, x: Float, y: Float) {
         val h = hit(x, y) ?: return
-        val p = Press(h.first, h.second)
+        val p = Press(h.first, h.second, x)
         presses[id] = p
         if (haptic) performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         if (p.key.repeat) {
@@ -366,6 +418,22 @@ class KeyboardView(context: Context) : View(context) {
 
     private fun move(id: Int, x: Float, y: Float) {
         val p = presses[id] ?: return
+        if (p.key.code == Codes.SPACE && !p.longDone) {
+            if (!p.swiping && Math.abs(x - p.startX) > dp(22f)) {
+                p.swiping = true
+                handler.removeCallbacks(p.longRun)
+                if (haptic) performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                invalidate()
+            }
+            // one swipe = one layout change, however far the finger travels
+            if (p.swiping && !p.swipeFired && Math.abs(x - p.startX) > dp(40f)) {
+                p.swipeFired = true
+                if (haptic) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                listener?.onSpaceSwipe(if (x > p.startX) 1 else -1)
+                invalidate()
+            }
+            return
+        }
         if (p.longDone || p.key.repeat) return
         if (!p.rect.contains(x, y)) {
             val h = hit(x, y)
@@ -383,7 +451,7 @@ class KeyboardView(context: Context) : View(context) {
         val p = presses.remove(id) ?: return
         handler.removeCallbacks(p.longRun)
         handler.removeCallbacks(p.repeatRun)
-        if (!p.longDone && !p.fired) listener?.onKey(p.key)
+        if (!p.longDone && !p.fired && !p.swiping) listener?.onKey(p.key)
         invalidate()
     }
 

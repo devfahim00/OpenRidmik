@@ -10,6 +10,9 @@ object Prefs {
         "suggestions" to true,
         "banglaDigits" to true,
         "clipboard" to true,
+        "lang_en" to true,
+        "lang_avro" to true,
+        "lang_probhat" to false,
     )
 
     private fun sp(c: Context) = c.getSharedPreferences("openridmik", Context.MODE_PRIVATE)
@@ -18,6 +21,12 @@ object Prefs {
 
     fun set(c: Context, key: String, value: Boolean) {
         sp(c).edit().putBoolean(key, value).apply()
+    }
+
+    /** Layouts the user wants to switch between, as indexes: 0 = English, 1 = Avro, 2 = Probhat (never empty). */
+    fun enabledLangs(c: Context): List<Int> {
+        val l = listOf("lang_en", "lang_avro", "lang_probhat").mapIndexedNotNull { i, k -> if (get(c, k)) i else null }
+        return l.ifEmpty { listOf(0) }
     }
 
     fun isBangla(c: Context): Boolean = sp(c).getString("lang", "en") == "bn"

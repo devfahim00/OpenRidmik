@@ -307,6 +307,32 @@ class SettingsActivity : Activity() {
         }
         root.addView(customToggle, root.indexOfChild(customBox), lp())
 
+        // ---- layouts ----
+        section("Keyboard layouts")
+        val langs = card()
+        fun langRow(first: Boolean, title: String, key: String) {
+            val sw = Switch(this).apply {
+                isChecked = Prefs.get(this@SettingsActivity, key)
+                setOnCheckedChangeListener { b, on ->
+                    Prefs.set(this@SettingsActivity, key, on)
+                    // at least one layout has to stay on
+                    if (listOf("lang_en", "lang_avro", "lang_probhat").none { Prefs.get(this@SettingsActivity, it) }) {
+                        Prefs.set(this@SettingsActivity, key, true)
+                        b.isChecked = true
+                        Toast.makeText(this@SettingsActivity, "Keep at least one layout on", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            row(langs, first, title, sw) { sw.toggle() }
+        }
+        langRow(true, "English", "lang_en")
+        langRow(false, "Avro (phonetic)", "lang_avro")
+        langRow(false, "Probhat", "lang_probhat")
+        root.addView(
+            text("Hold the space bar and slide left or right to switch between the layouts that are on.", 12f, muted),
+            lp(6),
+        )
+
         // ---- preferences ----
         section("Preferences")
         val prefs = card()
