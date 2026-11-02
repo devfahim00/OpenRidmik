@@ -219,6 +219,7 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         applyTheme()
         updateAutoCap()
         rebuild()
+        currentInputConnection?.let { refreshBar(it) }
         scheduleRefresh()
     }
 
@@ -321,8 +322,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         kbView.spaceArrows = Prefs.enabledLangs(this).size > 1
         kbView.spaceLabel = when {
             !bangla -> "English"
-            probhat -> "বাংলা · প্রভাত"
-            else -> "বাংলা · ফোনেটিক"
+            probhat -> "Probhat"
+            else -> "Avro"
         }
         kbView.rows = rows
         updateBarVisibility()
@@ -332,7 +333,8 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
     private fun updateBarVisibility() {
         if (!::toolbar.isInitialized || !::toggleBtn.isInitialized) return
         val noPanel = panel == null
-        val can = barHasItems && mode == Mode.ALPHA && !passwordField && !forceLatin && Prefs.get(this, "suggestions")
+        // the suggestion strip is the default view of the bar, even before anything has been typed
+        val can = mode == Mode.ALPHA && !passwordField && !forceLatin && Prefs.get(this, "suggestions")
         val showSug = can && !toolbarOpen
         suggestionBar.visibility = if (noPanel && showSug) View.VISIBLE else View.GONE
         toolbar.visibility = if (noPanel && !showSug) View.VISIBLE else View.GONE

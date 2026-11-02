@@ -237,7 +237,7 @@ class SettingsActivity : Activity() {
         root.addView(seg, lp())
         fun refreshSeg() {
             seg.removeAllViews()
-            for ((id, name) in listOf("avro" to "Avro · phonetic", "probhat" to "Probhat · প্রভাত")) {
+            for ((id, name) in listOf("avro" to "Avro", "probhat" to "Probhat · প্রভাত")) {
                 val on = Prefs.layout(this) == id
                 seg.addView(
                     text(name, 14f, if (on) onAccent else fg, bold = on).apply {
@@ -326,7 +326,7 @@ class SettingsActivity : Activity() {
             row(langs, first, title, sw) { sw.toggle() }
         }
         langRow(true, "English", "lang_en")
-        langRow(false, "Avro (phonetic)", "lang_avro")
+        langRow(false, "Avro", "lang_avro")
         langRow(false, "Probhat", "lang_probhat")
         root.addView(
             text("Hold the space bar and slide left or right to switch between the layouts that are on.", 12f, muted),
