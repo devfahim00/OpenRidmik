@@ -410,8 +410,9 @@ class OpenRidmikService : InputMethodService(), KeyboardView.Listener {
         val on = Prefs.enabledLangs(this)
         if (on.size < 2) return
         val i = on.indexOf(currentLang())
-        // either swipe direction moves forward: English -> Avro -> Probhat -> English
-        val next = if (i < 0) on.first() else on[(i + 1) % on.size]
+        // dir is +1 for a left-to-right swipe and -1 for right-to-left.
+        // Right-to-left goes forward (English -> Avro -> Probhat -> English), left-to-right goes back.
+        val next = if (i < 0) on.first() else on[(i - dir + on.size) % on.size]
         setLang(next)
     }
 
