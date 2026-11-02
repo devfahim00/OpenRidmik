@@ -75,6 +75,14 @@ class KeyboardView(context: Context) : View(context) {
             field = v
             invalidate()
         }
+    /** User-chosen keyboard height, in percent of the default row height. */
+    var heightPercent = 100
+        set(v) {
+            if (field == v) return
+            field = v
+            requestLayout()
+            invalidate()
+        }
     var rows: List<List<Key>> = emptyList()
         set(v) {
             field = v
@@ -151,7 +159,7 @@ class KeyboardView(context: Context) : View(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val tall = rows.size >= 6
-        val rh = dp(if (landscape) (if (tall) 34f else 40f) else (if (tall) 42f else 48f))
+        val rh = dp(if (landscape) (if (tall) 34f else 40f) else (if (tall) 42f else 48f)) * heightPercent / 100f
         val h = (rh * maxOf(rows.size, 1) + dp(8f)).toInt()
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), h)
     }

@@ -13,6 +13,7 @@ object Prefs {
         "lang_en" to true,
         "lang_avro" to true,
         "lang_probhat" to false,
+        "lang_jatiyo" to false,
     )
 
     private fun sp(c: Context) = c.getSharedPreferences("openridmik", Context.MODE_PRIVATE)
@@ -23,9 +24,9 @@ object Prefs {
         sp(c).edit().putBoolean(key, value).apply()
     }
 
-    /** Layouts the user wants to switch between, as indexes: 0 = English, 1 = Avro, 2 = Probhat (never empty). */
+    /** Layouts the user wants to switch between, as indexes: 0 = English, 1 = Avro, 2 = Probhat, 3 = Jatiyo (never empty). */
     fun enabledLangs(c: Context): List<Int> {
-        val l = listOf("lang_en", "lang_avro", "lang_probhat").mapIndexedNotNull { i, k -> if (get(c, k)) i else null }
+        val l = listOf("lang_en", "lang_avro", "lang_probhat", "lang_jatiyo").mapIndexedNotNull { i, k -> if (get(c, k)) i else null }
         return l.ifEmpty { listOf(0) }
     }
 
@@ -35,7 +36,7 @@ object Prefs {
         sp(c).edit().putString("lang", if (bangla) "bn" else "en").apply()
     }
 
-    /** Bangla typing layout: "avro" (phonetic) or "probhat" (fixed). */
+    /** Bangla typing layout: "avro" (phonetic), "probhat" or "jatiyo" (fixed). */
     fun layout(c: Context): String = sp(c).getString("layout", "avro") ?: "avro"
 
     fun setLayout(c: Context, layout: String) {
@@ -60,6 +61,17 @@ object Prefs {
             .putInt("custom_text", text)
             .putInt("custom_accent", accent)
             .apply()
+    }
+
+    /** Keyboard height as a percentage of the default (separate for portrait and landscape). */
+    const val HEIGHT_MIN = 60
+    const val HEIGHT_MAX = 140
+
+    fun heightPercent(c: Context, landscape: Boolean): Int =
+        sp(c).getInt(if (landscape) "height_land" else "height_port", 100).coerceIn(HEIGHT_MIN, HEIGHT_MAX)
+
+    fun setHeightPercent(c: Context, landscape: Boolean, pct: Int) {
+        sp(c).edit().putInt(if (landscape) "height_land" else "height_port", pct.coerceIn(HEIGHT_MIN, HEIGHT_MAX)).apply()
     }
 
     fun getString(c: Context, key: String, def: String = ""): String = sp(c).getString(key, def) ?: def
